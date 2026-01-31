@@ -5,10 +5,9 @@
  * Supports drag-and-drop, file picker, and shows upload progress.
  */
 
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { View, Text, Pressable, ActivityIndicator, Platform } from 'react-native';
 import { Image } from 'expo-image';
-import * as ImagePicker from 'expo-image-picker';
 import {
   Upload,
   Image as ImageIcon,
@@ -86,11 +85,14 @@ export function ImageUploader({
   const bucketConfig = STORAGE_BUCKETS[bucket];
   const maxSizeMB = bucketConfig.maxSize / (1024 * 1024);
 
-  // Handle file selection (native)
+  // Handle file selection (native) - uses dynamic import
   const handlePickImage = async () => {
-    if (disabled || state.isUploading) return;
+    if (disabled || state.isUploading || Platform.OS === 'web') return;
 
     try {
+      // Dynamic import for native only
+      const ImagePicker = await import('expo-image-picker');
+      
       // Request permission
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
@@ -122,11 +124,14 @@ export function ImageUploader({
     }
   };
 
-  // Handle camera capture (native)
+  // Handle camera capture (native) - uses dynamic import
   const handleTakePhoto = async () => {
-    if (disabled || state.isUploading) return;
+    if (disabled || state.isUploading || Platform.OS === 'web') return;
 
     try {
+      // Dynamic import for native only
+      const ImagePicker = await import('expo-image-picker');
+      
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
         setState((prev) => ({
@@ -568,11 +573,16 @@ export function ImageUploaderCompact({
   disabled?: boolean;
 }) {
   const [isUploading, setIsUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handlePick = async () => {
-    if (disabled || isUploading) return;
+  // Handle native image pick
+  const handlePickNative = async () => {
+    if (disabled || isUploading || Platform.OS === 'web') return;
 
     try {
+      // Dynamic import for native only
+      const ImagePicker = await import('expo-image-picker');
+      
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
@@ -602,9 +612,41 @@ export function ImageUploaderCompact({
     }
   };
 
+  // Handle web file select
+  const handleWebFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    try {
+      const uploadResult = await uploadImage(file, bucket, {
+        prefix,
+        fileName: file.name,
+      });
+
+      if (uploadResult.success && uploadResult.url) {
+        onChange(uploadResult.url);
+      }
+    } catch (error) {
+      console.error('Upload error:', error);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handlePress = () => {
+    if (disabled || isUploading) return;
+    
+    if (Platform.OS === 'web') {
+      fileInputRef.current?.click();
+    } else {
+      handlePickNative();
+    }
+  };
+
   return (
     <Pressable
-      onPress={handlePick}
+      onPress={handlePress}
       disabled={disabled || isUploading}
       style={{ width: size, height: size }}
       className={cn(
@@ -612,6 +654,17 @@ export function ImageUploaderCompact({
         value ? 'border-transparent' : 'border-slate-700 bg-slate-800'
       )}
     >
+      {/* Hidden file input for web */}
+      {Platform.OS === 'web' && (
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          onChange={handleWebFileSelect}
+          style={{ display: 'none' }}
+        />
+      )}
+      
       {value ? (
         <>
           <Image

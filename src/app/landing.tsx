@@ -95,22 +95,28 @@ export default function LandingPage() {
         <View className="absolute -left-16 top-1/2 h-48 w-48 rounded-full bg-emerald-500/5" />
 
         <View className="mx-auto w-full max-w-6xl px-6 py-20">
-          {/* Navigation */}
+          {/* Navigation - Sticky Header */}
           <Animated.View
             entering={FadeIn.delay(100)}
-            className="mb-16 flex-row items-center justify-between"
+            className="fixed left-0 right-0 top-0 z-50 bg-slate-900/95 backdrop-blur-sm px-6 py-4 flex-row items-center justify-between"
+            style={{ position: 'fixed' }}
           >
-            <View className="flex-row items-center gap-3">
-              <View className="h-10 w-10 items-center justify-center rounded-xl bg-emerald-500">
-                <Dumbbell size={20} color="white" />
+            <View className="flex-row items-center gap-3 mx-auto w-full max-w-6xl justify-between">
+              <View className="flex-row items-center gap-3">
+                <View className="h-10 w-10 items-center justify-center rounded-xl bg-emerald-500">
+                  <Dumbbell size={20} color="white" />
+                </View>
+                <Text className="text-xl font-bold text-white">Calisthenic Commando</Text>
               </View>
-              <Text className="text-xl font-bold text-white">Calisthenic Commando</Text>
-            </View>
 
-            <Pressable onPress={handleGetStarted} className="rounded-full bg-emerald-500/20 px-6 py-2">
-              <Text className="font-semibold text-emerald-400">Sign In</Text>
-            </Pressable>
+              <Pressable onPress={handleGetStarted} className="rounded-full bg-emerald-500/20 px-4 py-2">
+                <Text className="text-sm font-semibold text-emerald-400">Get Started</Text>
+              </Pressable>
+            </View>
           </Animated.View>
+
+          {/* Spacer for fixed header */}
+          <View className="h-16" />
 
           {/* Hero Content */}
           <View className="flex-row flex-wrap items-center">

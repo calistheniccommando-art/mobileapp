@@ -520,7 +520,7 @@ export default function PaywallScreen() {
     startPayment();
 
     // Get user info
-    const userId = useUserStore.getState().user?.id || 'anonymous';
+    const userId = useUserStore.getState().supabaseUserId || 'anonymous';
     const email = commandoData.email || 'user@example.com';
 
     try {
@@ -578,12 +578,16 @@ export default function PaywallScreen() {
     setTimeout(async () => {
       const paymentRecord = {
         id: `pay_${Date.now()}`,
+        userId: useUserStore.getState().supabaseUserId || 'anonymous',
+        subscriptionId: `sub_${Date.now()}`,
         planId: selectedPlanId!,
         amount: totalAmount,
         currency: 'NGN' as const,
         status: 'completed' as const,
         paymentMethod: 'card' as const,
+        reference: `ref_${Date.now()}`,
         transactionReference: `ref_${Date.now()}`,
+        createdAt: new Date().toISOString(),
         paidAt: new Date().toISOString(),
       };
 
@@ -620,12 +624,16 @@ export default function PaywallScreen() {
         // Create payment record for store
         const paymentRecord = {
           id: `pay_${Date.now()}`,
+          userId: useUserStore.getState().supabaseUserId || 'anonymous',
+          subscriptionId: `sub_${Date.now()}`,
           planId: result.planId!,
           amount: totalAmount,
           currency: 'NGN' as const,
           status: 'completed' as const,
           paymentMethod: 'card' as const,
+          reference: paymentReference,
           transactionReference: paymentReference,
+          createdAt: new Date().toISOString(),
           paidAt: new Date().toISOString(),
         };
 

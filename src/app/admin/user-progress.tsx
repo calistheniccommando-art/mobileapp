@@ -37,7 +37,7 @@ import {
   Flame,
   Target,
 } from 'lucide-react-native';
-import { supabase } from '@/lib/api/client';
+import { supabase } from '@/lib/supabase/client';
 import {
   fetchWorkoutProgress,
   fetchMealCompletions,

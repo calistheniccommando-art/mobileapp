@@ -97,7 +97,7 @@ export const userService = {
 
     const { data, error } = await supabase
       .from('users')
-      .insert(user)
+      .insert(user as any)
       .select()
       .single();
 
@@ -110,8 +110,8 @@ export const userService = {
       throw new DatabaseError('Supabase not configured');
     }
 
-    const { data, error } = await supabase
-      .from('users')
+    const { data, error } = await (supabase
+      .from('users') as any)
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', id)
       .select()
@@ -155,7 +155,7 @@ export const onboardingService = {
 
     const { data, error } = await supabase
       .from('user_onboarding')
-      .insert(onboarding)
+      .insert(onboarding as any)
       .select()
       .single();
 
@@ -171,8 +171,8 @@ export const onboardingService = {
       throw new DatabaseError('Supabase not configured');
     }
 
-    const { data, error } = await supabase
-      .from('user_onboarding')
+    const { data, error } = await (supabase
+      .from('user_onboarding') as any)
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('user_id', userId)
       .select()
@@ -219,14 +219,14 @@ export const planService = {
     }
 
     // Deactivate any existing active plans for this user
-    await supabase
-      .from('user_plans')
+    await (supabase
+      .from('user_plans') as any)
       .update({ is_active: false, updated_at: new Date().toISOString() })
       .eq('user_id', plan.user_id)
       .eq('is_active', true);
 
-    const { data, error } = await supabase
-      .from('user_plans')
+    const { data, error } = await (supabase
+      .from('user_plans') as any)
       .insert({ ...plan, is_active: true })
       .select()
       .single();
@@ -240,8 +240,8 @@ export const planService = {
       throw new DatabaseError('Supabase not configured');
     }
 
-    const { data, error } = await supabase
-      .from('user_plans')
+    const { data, error } = await (supabase
+      .from('user_plans') as any)
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', id)
       .select()
@@ -316,8 +316,8 @@ export const exerciseService = {
       throw new DatabaseError('Supabase not configured');
     }
 
-    const { data, error } = await supabase
-      .from('exercises')
+    const { data, error } = await (supabase
+      .from('exercises') as any)
       .insert(exercise)
       .select()
       .single();
@@ -331,8 +331,8 @@ export const exerciseService = {
       throw new DatabaseError('Supabase not configured');
     }
 
-    const { data, error } = await supabase
-      .from('exercises')
+    const { data, error } = await (supabase
+      .from('exercises') as any)
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', id)
       .select()
@@ -348,8 +348,8 @@ export const exerciseService = {
     }
 
     // Soft delete by marking as inactive
-    const { error } = await supabase
-      .from('exercises')
+    const { error } = await (supabase
+      .from('exercises') as any)
       .update({ is_active: false, updated_at: new Date().toISOString() })
       .eq('id', id);
 
@@ -408,8 +408,8 @@ export const workoutTemplateService = {
       throw new DatabaseError('Supabase not configured');
     }
 
-    const { data, error } = await supabase
-      .from('workout_templates')
+    const { data, error } = await (supabase
+      .from('workout_templates') as any)
       .insert(template)
       .select()
       .single();
@@ -426,8 +426,8 @@ export const workoutTemplateService = {
       throw new DatabaseError('Supabase not configured');
     }
 
-    const { data, error } = await supabase
-      .from('workout_templates')
+    const { data, error } = await (supabase
+      .from('workout_templates') as any)
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', id)
       .select()
@@ -502,8 +502,8 @@ export const mealService = {
       throw new DatabaseError('Supabase not configured');
     }
 
-    const { data, error } = await supabase
-      .from('meals')
+    const { data, error } = await (supabase
+      .from('meals') as any)
       .insert(meal)
       .select()
       .single();
@@ -517,8 +517,8 @@ export const mealService = {
       throw new DatabaseError('Supabase not configured');
     }
 
-    const { data, error } = await supabase
-      .from('meals')
+    const { data, error } = await (supabase
+      .from('meals') as any)
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', id)
       .select()
@@ -576,8 +576,8 @@ export const dailyProgressService = {
       throw new DatabaseError('Supabase not configured');
     }
 
-    const { data, error } = await supabase
-      .from('user_daily_progress')
+    const { data, error } = await (supabase
+      .from('user_daily_progress') as any)
       .upsert(
         { ...progress, updated_at: new Date().toISOString() },
         { onConflict: 'user_id,date' }
@@ -665,8 +665,8 @@ export const subscriptionService = {
       throw new DatabaseError('Supabase not configured');
     }
 
-    const { data, error } = await supabase
-      .from('subscriptions')
+    const { data, error } = await (supabase
+      .from('subscriptions') as any)
       .insert(subscription)
       .select()
       .single();
@@ -680,8 +680,8 @@ export const subscriptionService = {
       throw new DatabaseError('Supabase not configured');
     }
 
-    const { data, error } = await supabase
-      .from('subscriptions')
+    const { data, error } = await (supabase
+      .from('subscriptions') as any)
       .update({ ...updates, updated_at: new Date().toISOString() })
       .eq('id', id)
       .select()
@@ -705,7 +705,7 @@ export const auditLogService = {
   async log(entry: AuditLogInsert): Promise<void> {
     if (!isSupabaseConfigured()) return;
 
-    const { error } = await supabase.from('audit_log').insert(entry);
+    const { error } = await (supabase.from('audit_log') as any).insert(entry);
 
     if (error) {
       console.error('Failed to write audit log:', error);
@@ -726,8 +726,8 @@ export const auditLogService = {
       action,
       entity_type: entityType,
       entity_id: entityId,
-      old_data: oldData as Record<string, unknown>,
-      new_data: newData as Record<string, unknown>,
+      old_data: oldData as any,
+      new_data: newData as any,
     });
   },
 };

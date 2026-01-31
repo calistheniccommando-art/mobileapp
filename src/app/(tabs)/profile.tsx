@@ -376,8 +376,8 @@ function PaymentHistorySection() {
 }
 
 function PaymentItem({ payment }: { payment: PaymentRecord }) {
-  const plan = SUBSCRIPTION_PLANS[payment.planId];
-  const date = payment.paidAt ? new Date(payment.paidAt) : new Date();
+  const plan = payment.planId ? SUBSCRIPTION_PLANS[payment.planId] : undefined;
+  const date = payment.paidAt ? new Date(payment.paidAt) : new Date(payment.createdAt);
 
   const statusIcon = payment.status === 'completed' ? Check : Clock;
   const StatusIcon = statusIcon;

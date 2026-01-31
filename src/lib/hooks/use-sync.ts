@@ -74,11 +74,11 @@ export function useSync(options: SyncOptions = {}): UseSyncResult {
   // Refs for cleanup
   const networkUnsubscribe = useRef<(() => void) | null>(null);
   const realtimeUnsubscribe = useRef<(() => void) | null>(null);
-  const syncIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const syncIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
 
   // Get user ID from stores
-  const userId = useUserStore((s) => s.userId);
+  const userId = useUserStore((s) => s.supabaseUserId);
   const progressSetUserId = useProgressStore((s) => s.setUserId);
   const fastingSetUserId = useFastingStore((s) => s.setUserId);
   const progressSyncToCloud = useProgressStore((s) => s.syncToCloud);

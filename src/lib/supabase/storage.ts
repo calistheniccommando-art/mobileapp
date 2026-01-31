@@ -5,7 +5,7 @@
  * Supports images for meals, exercises, and thumbnails.
  */
 
-import { supabase } from '@/lib/api/client';
+import { supabase } from './client';
 
 // ==================== TYPES ====================
 

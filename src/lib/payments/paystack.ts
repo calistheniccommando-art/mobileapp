@@ -117,6 +117,7 @@ export interface PaymentTransaction {
   currency: string;
   status: 'pending' | 'success' | 'failed' | 'abandoned';
   plan_id: SubscriptionPlanId;
+  subscription_id?: string;
   is_trial: boolean;
   paystack_id?: number;
   gateway_response?: string;
@@ -138,9 +139,9 @@ const PAYSTACK_PUBLIC_KEY = process.env.EXPO_PUBLIC_PAYSTACK_PUBLIC_KEY || '';
 // Plan amounts in kobo (Naira * 100)
 export const PLAN_AMOUNTS_KOBO: Record<SubscriptionPlanId, number> = {
   monthly: SUBSCRIPTION_PLANS.monthly.priceNaira * 100,
-  quarterly: SUBSCRIPTION_PLANS.quarterly.priceNaira * 100,
-  hero: SUBSCRIPTION_PLANS.hero.priceNaira * 100,
-  ultimate: SUBSCRIPTION_PLANS.ultimate.priceNaira * 100,
+  '3_month': SUBSCRIPTION_PLANS['3_month'].priceNaira * 100,
+  '6_month': SUBSCRIPTION_PLANS['6_month'].priceNaira * 100,
+  '12_month': SUBSCRIPTION_PLANS['12_month'].priceNaira * 100,
 };
 
 export const TRIAL_AMOUNT_KOBO = TRIAL_OFFER.priceNaira * 100;
@@ -524,13 +525,15 @@ export const paystackService = {
   toPaymentRecord(transaction: PaymentTransaction): PaymentRecord {
     return {
       id: transaction.id,
-      planId: transaction.plan_id,
+      userId: transaction.user_id,
+      subscriptionId: transaction.subscription_id || '',
       amount: koboToNaira(transaction.amount),
       currency: 'NGN',
       status: transaction.status === 'success' ? 'completed' : transaction.status === 'pending' ? 'pending' : 'failed',
       paymentMethod: transaction.channel === 'card' ? 'card' : 'bank_transfer',
-      transactionReference: transaction.reference,
-      paidAt: transaction.paid_at || transaction.created_at,
+      reference: transaction.reference,
+      createdAt: transaction.created_at,
+      completedAt: transaction.paid_at || undefined,
     };
   },
 };

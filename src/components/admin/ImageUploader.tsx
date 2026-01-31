@@ -179,7 +179,7 @@ export function ImageUploader({
           ...prev,
           isUploading: false,
           progress: 100,
-          uploadedUrl: result.url,
+          uploadedUrl: result.url ?? null,
           error: null,
         }));
         onChange(result.url);
@@ -247,7 +247,7 @@ export function ImageUploader({
           ...prev,
           isUploading: false,
           progress: 100,
-          uploadedUrl: result.url,
+          uploadedUrl: result.url ?? null,
           error: null,
         }));
         onChange(result.url);
@@ -379,7 +379,7 @@ function UploadArea({
   onDrop: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
   onDragLeave: () => void;
-  fileInputRef: React.RefObject<HTMLInputElement>;
+  fileInputRef: React.RefObject<HTMLInputElement | null>;
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
 }) {
   // Error state

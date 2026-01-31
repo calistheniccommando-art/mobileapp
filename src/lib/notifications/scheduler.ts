@@ -6,6 +6,7 @@
  */
 
 import * as Notifications from 'expo-notifications';
+import { SchedulableTriggerInputTypes } from 'expo-notifications';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { 
   pushNotifications, 
@@ -140,7 +141,7 @@ export async function scheduleFastingNotifications(
     if (startTime > now) {
       const startId = await pushNotifications.scheduleNotification(
         NotificationTemplates.fastingEnd(),
-        { date: startTime }
+        { type: SchedulableTriggerInputTypes.DATE, date: startTime }
       );
 
       if (startId) {
@@ -175,7 +176,7 @@ export async function scheduleFastingNotifications(
 
       const endId = await pushNotifications.scheduleNotification(
         NotificationTemplates.fastingStart(nextEatFormatted),
-        { date: endTime }
+        { type: SchedulableTriggerInputTypes.DATE, date: endTime }
       );
 
       if (endId) {
@@ -242,7 +243,7 @@ export async function scheduleWorkoutNotifications(
     if (reminderTime > now) {
       const id = await pushNotifications.scheduleNotification(
         NotificationTemplates.workoutReminder(),
-        { date: reminderTime }
+        { type: SchedulableTriggerInputTypes.DATE, date: reminderTime }
       );
 
       if (id) {
@@ -269,7 +270,7 @@ export async function scheduleWorkoutReminder(
 
   const id = await pushNotifications.scheduleNotification(
     NotificationTemplates.workoutReminder(workoutName),
-    { date: time }
+    { type: SchedulableTriggerInputTypes.DATE, date: time }
   );
 
   if (id) {
@@ -337,7 +338,7 @@ export async function scheduleMealNotifications(
       if (mealTime > now) {
         const id = await pushNotifications.scheduleNotification(
           NotificationTemplates.mealReminder(meal.type),
-          { date: mealTime }
+          { type: SchedulableTriggerInputTypes.DATE, date: mealTime }
         );
 
         if (id) {
@@ -375,7 +376,7 @@ export async function scheduleStreakMilestone(
 
   const id = await pushNotifications.scheduleNotification(
     NotificationTemplates.streakMilestone(nextMilestone),
-    { date: milestoneDate }
+    { type: SchedulableTriggerInputTypes.DATE, date: milestoneDate }
   );
 
   if (id) {
@@ -437,7 +438,7 @@ export async function scheduleSubscriptionExpirationWarning(
     if (warningDate > now) {
       const id = await pushNotifications.scheduleNotification(
         NotificationTemplates.subscriptionExpiring(daysBeforeExpiration),
-        { date: warningDate }
+        { type: SchedulableTriggerInputTypes.DATE, date: warningDate }
       );
 
       if (id) {

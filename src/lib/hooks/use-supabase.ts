@@ -189,7 +189,7 @@ export function useCreatePlan() {
 export function useExercises() {
   return useQuery({
     queryKey: queryKeys.exercises(),
-    queryFn: () => exerciseService.getAll(),
+    queryFn: () => exerciseService.list({ filters: { isActive: true } }).then(r => r.exercises),
     enabled: isSupabaseConfigured(),
     staleTime: 30 * 60 * 1000, // 30 minutes - exercises don't change often
   });
@@ -207,7 +207,7 @@ export function useExercisesByLevel(level: FitnessLevel) {
 export function useExercisesByMuscleGroup(muscleGroup: string) {
   return useQuery({
     queryKey: queryKeys.exercisesByMuscle(muscleGroup),
-    queryFn: () => exerciseService.getByMuscleGroup(muscleGroup),
+    queryFn: () => exerciseService.getByMuscleGroup(muscleGroup as any),
     enabled: !!muscleGroup && isSupabaseConfigured(),
     staleTime: 30 * 60 * 1000,
   });
@@ -265,7 +265,7 @@ export function useMeals() {
 export function useMealsByType(type: MealType) {
   return useQuery({
     queryKey: queryKeys.mealsByType(type),
-    queryFn: () => mealService.getByType(type),
+    queryFn: () => mealService.getByType(type as any),
     enabled: !!type && isSupabaseConfigured(),
     staleTime: 30 * 60 * 1000,
   });
@@ -446,7 +446,7 @@ export function useSyncOnLoad(userId: string | null) {
         }),
         queryClient.prefetchQuery({
           queryKey: queryKeys.exercises(),
-          queryFn: () => exerciseService.getAll(),
+          queryFn: () => exerciseService.list({ filters: { isActive: true } }).then(r => r.exercises),
         }),
         queryClient.prefetchQuery({
           queryKey: queryKeys.meals(),

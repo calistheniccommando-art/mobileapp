@@ -27,10 +27,17 @@ import {
   getBestThumbnail,
   getWatchUrl,
   fetchVideoTitle,
-  type VideoInfo,
 } from '@/lib/youtube';
 
 // ==================== TYPES ====================
+
+// Local VideoInfo interface for this component's needs
+interface VideoInfo {
+  id: string;
+  title: string;
+  thumbnailUrl: string;
+  watchUrl: string;
+}
 
 export interface YouTubeInputProps {
   value: string;

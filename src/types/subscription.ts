@@ -168,12 +168,15 @@ export interface PaymentRecord {
   id: string;
   userId: string;
   subscriptionId: string;
+  planId?: SubscriptionPlanId;  // Optional for backwards compatibility
   amount: number;
   currency: 'NGN';
   status: PaymentStatus;
   paymentMethod: string;
   reference: string;
+  transactionReference?: string; // Alias for reference
   createdAt: string;
+  paidAt?: string;  // Alias for completedAt
   completedAt?: string;
   failureReason?: string;
 }

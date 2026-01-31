@@ -5,7 +5,7 @@
  * Supports offline queue, conflict resolution, and real-time sync.
  */
 
-import { supabase } from '@/lib/api/client';
+import { supabase } from './client';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 

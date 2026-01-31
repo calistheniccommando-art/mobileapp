@@ -25,8 +25,8 @@ import {
   Phone,
   Mail,
 } from 'lucide-react-native';
-import { Paystack, paystackProps } from 'react-native-paystack-webview';
 
+import { PaystackButton } from '@/components/PaystackButton';
 import { useCartStore } from '@/lib/state/cart-store';
 import { orderService } from '@/lib/supabase/orders';
 import { useUserStore } from '@/lib/state/user-store';
@@ -34,7 +34,6 @@ import type { PaymentMethod } from '@/types/store';
 
 export default function CheckoutScreen() {
   const router = useRouter();
-  const paystackWebViewRef = React.useRef<paystackProps.PayStackRef>(null);
 
   const [isProcessing, setIsProcessing] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('paystack');
@@ -97,29 +96,25 @@ export default function CheckoutScreen() {
     Alert.alert('Payment Cancelled', 'Your payment was cancelled.');
   };
 
-  const handlePayNow = () => {
+  const handleBankTransfer = () => {
     if (!shippingAddress) {
       Alert.alert('Error', 'Please add a shipping address');
       router.back();
       return;
     }
 
-    if (paymentMethod === 'paystack') {
-      paystackWebViewRef.current?.startTransaction();
-    } else if (paymentMethod === 'transfer') {
-      // Show bank transfer details
-      Alert.alert(
-        'Bank Transfer',
-        'Account Details:\n\nBank: GTBank\nAccount Number: 0123456789\nAccount Name: Commando Fitness\n\nPlease use your email as payment reference.\n\nYour order will be processed once payment is confirmed.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          {
-            text: 'I have transferred',
-            onPress: () => handleManualPayment(),
-          },
-        ]
-      );
-    }
+    // Show bank transfer details
+    Alert.alert(
+      'Bank Transfer',
+      'Account Details:\n\nBank: GTBank\nAccount Number: 0123456789\nAccount Name: Commando Fitness\n\nPlease use your email as payment reference.\n\nYour order will be processed once payment is confirmed.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'I have transferred',
+          onPress: () => handleManualPayment(),
+        },
+      ]
+    );
   };
 
   const handleManualPayment = async () => {
@@ -177,17 +172,6 @@ export default function CheckoutScreen() {
   return (
     <View className="flex-1 bg-slate-900">
       <SafeAreaView className="flex-1" edges={['top']}>
-        {/* Paystack WebView */}
-        <Paystack
-          paystackKey="pk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" // Replace with your key
-          billingEmail={shippingAddress.email}
-          amount={total}
-          currency="NGN"
-          onCancel={handlePaymentCancel}
-          onSuccess={handlePaymentSuccess}
-          ref={paystackWebViewRef}
-        />
-
         {/* Header */}
         <View className="flex-row items-center px-4 py-4">
           <TouchableOpacity onPress={() => router.back()} className="p-2">
@@ -338,27 +322,47 @@ export default function CheckoutScreen() {
 
         {/* Bottom Action */}
         <View className="absolute bottom-0 left-0 right-0 bg-slate-900 px-4 pb-8 pt-4 border-t border-slate-800">
-          <TouchableOpacity
-            onPress={handlePayNow}
-            disabled={isProcessing}
-            className={`py-4 rounded-xl flex-row items-center justify-center ${
-              isProcessing ? 'bg-slate-600' : 'bg-emerald-500'
-            }`}
-          >
-            {isProcessing ? (
-              <>
-                <ActivityIndicator color="#fff" size="small" />
-                <Text className="text-white font-bold ml-2">Processing...</Text>
-              </>
-            ) : (
-              <>
-                <CreditCard size={20} color="#fff" />
-                <Text className="text-white font-bold ml-2">
-                  Pay {formatPrice(total)}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
+          {paymentMethod === 'paystack' ? (
+            <PaystackButton
+              paystackKey="pk_live_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" // Replace with your key
+              email={shippingAddress.email}
+              amount={total}
+              currency="NGN"
+              onSuccess={handlePaymentSuccess}
+              onCancel={handlePaymentCancel}
+              disabled={isProcessing}
+              className={`py-4 rounded-xl flex-row items-center justify-center ${
+                isProcessing ? 'bg-slate-600' : 'bg-emerald-500'
+              }`}
+            >
+              <CreditCard size={20} color="#fff" />
+              <Text className="text-white font-bold ml-2">
+                Pay {formatPrice(total)}
+              </Text>
+            </PaystackButton>
+          ) : (
+            <TouchableOpacity
+              onPress={handleBankTransfer}
+              disabled={isProcessing}
+              className={`py-4 rounded-xl flex-row items-center justify-center ${
+                isProcessing ? 'bg-slate-600' : 'bg-emerald-500'
+              }`}
+            >
+              {isProcessing ? (
+                <>
+                  <ActivityIndicator color="#fff" size="small" />
+                  <Text className="text-white font-bold ml-2">Processing...</Text>
+                </>
+              ) : (
+                <>
+                  <Wallet size={20} color="#fff" />
+                  <Text className="text-white font-bold ml-2">
+                    Pay via Bank Transfer
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       </SafeAreaView>
     </View>

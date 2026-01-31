@@ -2,10 +2,10 @@
  * PAYWALL SCREEN
  *
  * Gender-aware subscription paywall that displays after onboarding.
- * Shows pricing plans, trial options, and handles payment flow.
+ * Shows pricing plans, trial options, and handles Paystack payment flow.
  */
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -15,6 +15,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   Alert,
+  Modal,
+  ActivityIndicator,
+  Linking,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -48,9 +51,12 @@ import {
   Zap,
   Gift,
   X,
+  CreditCard,
+  AlertCircle,
 } from 'lucide-react-native';
 import { cn } from '@/lib/cn';
 import { useOnboardingData as useCommandoData } from '@/lib/state/commando-store';
+import { useUserStore } from '@/lib/state/user-store';
 import {
   useSubscriptionStore,
   useSelectedPlan,
@@ -69,6 +75,11 @@ import {
   PAYWALL_CONTENT_FEMALE,
 } from '@/types/subscription';
 import { emailService, buildConfirmationEmailData } from '@/lib/services/email-service';
+import {
+  paystackService,
+  getPaystackPopupConfig,
+  formatAmount,
+} from '@/lib/payments/paystack';
 
 // ==================== PLAN CARD COMPONENT ====================
 
@@ -424,6 +435,11 @@ export default function PaywallScreen() {
   const [showShippingForm, setShowShippingForm] = useState(false);
   const [expandedPlanId, setExpandedPlanId] = useState<SubscriptionPlanId | null>(null);
 
+  // Paystack payment state
+  const [paymentReference, setPaymentReference] = useState<string | null>(null);
+  const [showPaymentPending, setShowPaymentPending] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+
   // Auto-select the 6-month plan on mount if no plan is selected
   useEffect(() => {
     if (!selectedPlanId && !isTrialSelected) {
@@ -497,24 +513,78 @@ export default function PaywallScreen() {
     [setShippingAddress]
   );
 
-  const processPayment = useCallback(() => {
+  const processPayment = useCallback(async () => {
+    if (!selectedPlanId) return;
+
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     startPayment();
 
-    // Simulate payment processing
-    // In production, this would integrate with a payment provider
+    // Get user info
+    const userId = useUserStore.getState().user?.id || 'anonymous';
+    const email = commandoData.email || 'user@example.com';
+
+    try {
+      // Check if Paystack is configured
+      if (!paystackService.isConfigured()) {
+        // Fallback to simulation for development
+        console.log('Paystack not configured, using simulation mode');
+        await simulatePayment();
+        return;
+      }
+
+      // Start real Paystack payment
+      const paymentResult = await paystackService.startPayment(
+        userId,
+        email,
+        selectedPlanId,
+        isTrialSelected,
+        // Callback URL for web - handles return from Paystack
+        Platform.OS === 'web' ? `${window.location.origin}/payment-callback` : undefined
+      );
+
+      if (paymentResult.authorizationUrl) {
+        // Open Paystack checkout
+        if (Platform.OS === 'web') {
+          // Redirect to Paystack
+          window.location.href = paymentResult.authorizationUrl;
+        } else {
+          // Open in browser for mobile
+          const canOpen = await Linking.canOpenURL(paymentResult.authorizationUrl);
+          if (canOpen) {
+            await Linking.openURL(paymentResult.authorizationUrl);
+            // Store reference for verification when user returns
+            setPaymentReference(paymentResult.reference);
+            setShowPaymentPending(true);
+          } else {
+            throw new Error('Cannot open payment page');
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Payment error:', error);
+      failPayment(error instanceof Error ? error.message : 'Payment failed');
+    }
+  }, [
+    totalAmount,
+    startPayment,
+    failPayment,
+    selectedPlanId,
+    isTrialSelected,
+    commandoData,
+  ]);
+
+  // Simulate payment for development/testing
+  const simulatePayment = async () => {
     setTimeout(async () => {
       const paymentRecord = {
         id: `pay_${Date.now()}`,
-        userId: 'user_1',
-        subscriptionId: '',
+        planId: selectedPlanId!,
         amount: totalAmount,
         currency: 'NGN' as const,
         status: 'completed' as const,
-        paymentMethod: 'card',
-        reference: `ref_${Date.now()}`,
-        createdAt: new Date().toISOString(),
-        completedAt: new Date().toISOString(),
+        paymentMethod: 'card' as const,
+        transactionReference: `ref_${Date.now()}`,
+        paidAt: new Date().toISOString(),
       };
 
       completePayment(paymentRecord);
@@ -534,7 +604,60 @@ export default function PaywallScreen() {
       // Navigate to main app
       router.replace('/(tabs)');
     }, 2000);
-  }, [totalAmount, startPayment, completePayment, selectedPlanId, commandoData, gender]);
+  };
+
+  // Verify payment when user returns from Paystack
+  const verifyPayment = useCallback(async () => {
+    if (!paymentReference) return;
+
+    setIsVerifying(true);
+    try {
+      const result = await paystackService.completePayment(paymentReference);
+
+      if (result.success) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+
+        // Create payment record for store
+        const paymentRecord = {
+          id: `pay_${Date.now()}`,
+          planId: result.planId!,
+          amount: totalAmount,
+          currency: 'NGN' as const,
+          status: 'completed' as const,
+          paymentMethod: 'card' as const,
+          transactionReference: paymentReference,
+          paidAt: new Date().toISOString(),
+        };
+
+        completePayment(paymentRecord);
+
+        // Send confirmation email
+        if (result.planId && commandoData.email) {
+          const emailData = buildConfirmationEmailData(
+            commandoData.firstName ?? 'Warrior',
+            commandoData.email,
+            gender,
+            result.planId,
+            new Date()
+          );
+          await emailService.sendConfirmationEmail(emailData);
+        }
+
+        setShowPaymentPending(false);
+        setPaymentReference(null);
+
+        // Navigate to main app
+        router.replace('/(tabs)');
+      } else {
+        failPayment(result.message);
+        setShowPaymentPending(false);
+      }
+    } catch (error) {
+      failPayment(error instanceof Error ? error.message : 'Verification failed');
+    } finally {
+      setIsVerifying(false);
+    }
+  }, [paymentReference, totalAmount, completePayment, failPayment, commandoData, gender]);
 
   const iconMap: Record<string, typeof Dumbbell> = {
     dumbbell: Dumbbell,
@@ -546,6 +669,61 @@ export default function PaywallScreen() {
     moon: Moon,
     trophy: Trophy,
   };
+
+  // Payment pending modal component
+  const PaymentPendingModal = () => (
+    <Modal visible={showPaymentPending} animationType="fade" transparent>
+      <View className="flex-1 justify-center items-center bg-black/80 p-6">
+        <BlurView intensity={60} tint="dark" style={{ borderRadius: 24, overflow: 'hidden' }}>
+          <View className="p-6 items-center">
+            <View
+              className="w-16 h-16 rounded-full items-center justify-center mb-4"
+              style={{ backgroundColor: `${accentColor}30` }}
+            >
+              {isVerifying ? (
+                <ActivityIndicator color={accentColor} size="large" />
+              ) : (
+                <CreditCard size={32} color={accentColor} />
+              )}
+            </View>
+            
+            <Text className="text-xl font-bold text-white mb-2">
+              {isVerifying ? 'Verifying Payment...' : 'Complete Your Payment'}
+            </Text>
+            
+            <Text className="text-white/60 text-center mb-6">
+              {isVerifying
+                ? 'Please wait while we verify your payment.'
+                : 'Click verify after completing payment in the browser.'}
+            </Text>
+
+            {!isVerifying && (
+              <View className="flex-row gap-3">
+                <Pressable
+                  onPress={() => {
+                    setShowPaymentPending(false);
+                    setPaymentReference(null);
+                    failPayment('Payment cancelled');
+                  }}
+                  className="flex-1 py-3 px-6 rounded-xl border border-white/20"
+                >
+                  <Text className="text-white text-center font-medium">Cancel</Text>
+                </Pressable>
+                
+                <Pressable
+                  onPress={verifyPayment}
+                  className="flex-1 py-3 px-6 rounded-xl"
+                  style={{ backgroundColor: accentColor }}
+                >
+                  <Text className="text-white text-center font-semibold">Verify</Text>
+                </Pressable>
+              </View>
+            )}
+          </View>
+        </BlurView>
+      </View>
+    </Modal>
+  );
 
   if (showShippingForm) {
     return (
@@ -559,6 +737,9 @@ export default function PaywallScreen() {
 
   return (
     <View className="flex-1">
+      {/* Payment Pending Modal */}
+      <PaymentPendingModal />
+
       <LinearGradient
         colors={theme.gradient as [string, string, string]}
         style={{ position: 'absolute', width: '100%', height: '100%' }}

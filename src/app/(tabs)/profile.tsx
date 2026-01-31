@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import { View, Text, ScrollView, Pressable, Alert } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -27,14 +27,21 @@ import {
   Mail,
   Calendar,
   Trash2,
+  CreditCard,
+  Receipt,
+  Check,
+  Clock,
+  Crown,
 } from 'lucide-react-native';
 import { cn } from '@/lib/cn';
 import { useUserStore, useProfile, useFastingPlan } from '@/lib/state/user-store';
 import { usePersonalizedPlan, useIsComplete, useOnboardingData as useCommandoData, useCommandoStore } from '@/lib/state/commando-store';
 import { useMealSelectionStore } from '@/lib/state/meal-selection-store';
-import { useSubscriptionStore } from '@/lib/state/subscription-store';
+import { useSubscriptionStore, formatPrice } from '@/lib/state/subscription-store';
 import { getFastingWindow } from '@/data/mock-data';
+import { SUBSCRIPTION_PLANS } from '@/types/subscription';
 import type { FastingPlan, WorkType, DifficultyLevel, MealIntensity } from '@/types/fitness';
+import type { PaymentRecord } from '@/types/subscription';
 
 const WORK_TYPE_LABELS: Record<WorkType, string> = {
   sedentary: 'Sedentary',
@@ -222,6 +229,198 @@ function FastingPlanSelector({ currentFastingPlan }: { currentFastingPlan: Fasti
   );
 }
 
+// ==================== SUBSCRIPTION CARD ====================
+
+function SubscriptionCard() {
+  const subscription = useSubscriptionStore((s) => s.subscription);
+  const getDaysRemaining = useSubscriptionStore((s) => s.getDaysRemaining);
+  const getSubscriptionStatus = useSubscriptionStore((s) => s.getSubscriptionStatus);
+
+  if (!subscription) {
+    return (
+      <Animated.View entering={FadeInDown.delay(225).springify()}>
+        <Pressable onPress={() => router.push('/paywall')}>
+          <BlurView intensity={30} tint="dark" style={{ borderRadius: 16, overflow: 'hidden' }}>
+            <LinearGradient
+              colors={['rgba(245,158,11,0.2)', 'rgba(245,158,11,0.05)']}
+              style={{ padding: 16, borderRadius: 16 }}
+            >
+              <View className="flex-row items-center justify-between">
+                <View className="flex-row items-center">
+                  <View className="mr-3 h-12 w-12 items-center justify-center rounded-xl bg-amber-500/30">
+                    <Crown size={24} color="#f59e0b" />
+                  </View>
+                  <View>
+                    <Text className="text-base font-semibold text-white">No Active Subscription</Text>
+                    <Text className="text-sm text-white/60">Tap to subscribe</Text>
+                  </View>
+                </View>
+                <ChevronRight size={20} color="rgba(255,255,255,0.4)" />
+              </View>
+            </LinearGradient>
+          </BlurView>
+        </Pressable>
+      </Animated.View>
+    );
+  }
+
+  const status = getSubscriptionStatus();
+  const daysRemaining = getDaysRemaining();
+  const plan = SUBSCRIPTION_PLANS[subscription.planId];
+
+  const statusColors = {
+    active: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', icon: '#10b981' },
+    trial: { bg: 'bg-amber-500/20', text: 'text-amber-400', icon: '#f59e0b' },
+    expired: { bg: 'bg-red-500/20', text: 'text-red-400', icon: '#ef4444' },
+    cancelled: { bg: 'bg-gray-500/20', text: 'text-gray-400', icon: '#6b7280' },
+  };
+
+  const colors = statusColors[status as keyof typeof statusColors] || statusColors.active;
+
+  return (
+    <Animated.View entering={FadeInDown.delay(225).springify()}>
+      <BlurView intensity={30} tint="dark" style={{ borderRadius: 16, overflow: 'hidden' }}>
+        <LinearGradient
+          colors={['rgba(16,185,129,0.2)', 'rgba(16,185,129,0.05)']}
+          style={{ padding: 16, borderRadius: 16 }}
+        >
+          <View className="flex-row items-center justify-between">
+            <View className="flex-row items-center">
+              <View className="mr-3 h-12 w-12 items-center justify-center rounded-xl bg-emerald-500/30">
+                <Crown size={24} color="#10b981" />
+              </View>
+              <View>
+                <Text className="text-base font-semibold text-white">{plan?.name || 'Subscription'}</Text>
+                <View className="flex-row items-center">
+                  <View className={cn('rounded-full px-2 py-0.5 mr-2', colors.bg)}>
+                    <Text className={cn('text-xs font-medium capitalize', colors.text)}>
+                      {status === 'trial' ? 'Trial' : status}
+                    </Text>
+                  </View>
+                  <Text className="text-sm text-white/60">
+                    {daysRemaining} days left
+                  </Text>
+                </View>
+              </View>
+            </View>
+            <View className="items-end">
+              <Text className="text-lg font-bold text-emerald-400">
+                {formatPrice(subscription.amountPaid)}
+              </Text>
+              <Text className="text-xs text-white/40">paid</Text>
+            </View>
+          </View>
+        </LinearGradient>
+      </BlurView>
+    </Animated.View>
+  );
+}
+
+// ==================== PAYMENT HISTORY ====================
+
+function PaymentHistorySection() {
+  const payments = useSubscriptionStore((s) => s.payments);
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  if (payments.length === 0) {
+    return null;
+  }
+
+  const displayedPayments = isExpanded ? payments : payments.slice(0, 2);
+
+  return (
+    <Animated.View entering={FadeInDown.delay(275).springify()}>
+      <Pressable
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+          setIsExpanded(!isExpanded);
+        }}
+      >
+        <BlurView intensity={30} tint="dark" style={{ borderRadius: 16, overflow: 'hidden' }}>
+          <View className="p-4 border border-white/5">
+            {/* Header */}
+            <View className="flex-row items-center justify-between mb-3">
+              <View className="flex-row items-center">
+                <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-blue-500/20">
+                  <Receipt size={20} color="#3b82f6" />
+                </View>
+                <Text className="text-base font-semibold text-white">Payment History</Text>
+              </View>
+              <ChevronRight
+                size={18}
+                color="rgba(255,255,255,0.4)"
+                style={{
+                  transform: [{ rotate: isExpanded ? '90deg' : '0deg' }],
+                }}
+              />
+            </View>
+
+            {/* Payment list */}
+            <View className="gap-2">
+              {displayedPayments.map((payment, index) => (
+                <PaymentItem key={payment.id || index} payment={payment} />
+              ))}
+            </View>
+
+            {/* Show more indicator */}
+            {payments.length > 2 && !isExpanded && (
+              <Text className="text-center text-sm text-white/40 mt-2">
+                +{payments.length - 2} more payments
+              </Text>
+            )}
+          </View>
+        </BlurView>
+      </Pressable>
+    </Animated.View>
+  );
+}
+
+function PaymentItem({ payment }: { payment: PaymentRecord }) {
+  const plan = SUBSCRIPTION_PLANS[payment.planId];
+  const date = payment.paidAt ? new Date(payment.paidAt) : new Date();
+
+  const statusIcon = payment.status === 'completed' ? Check : Clock;
+  const StatusIcon = statusIcon;
+
+  return (
+    <View className="flex-row items-center justify-between py-2 border-t border-white/5">
+      <View className="flex-row items-center flex-1">
+        <View
+          className={cn(
+            'h-8 w-8 items-center justify-center rounded-lg mr-3',
+            payment.status === 'completed' ? 'bg-emerald-500/20' : 'bg-amber-500/20'
+          )}
+        >
+          <StatusIcon
+            size={16}
+            color={payment.status === 'completed' ? '#10b981' : '#f59e0b'}
+          />
+        </View>
+        <View className="flex-1">
+          <Text className="text-sm font-medium text-white">{plan?.name || 'Payment'}</Text>
+          <Text className="text-xs text-white/40">
+            {date.toLocaleDateString('en-NG', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            })}
+          </Text>
+        </View>
+      </View>
+      <View className="items-end">
+        <Text className="text-sm font-semibold text-white">
+          {formatPrice(payment.amount)}
+        </Text>
+        <Text className="text-xs text-white/40 capitalize">
+          {payment.paymentMethod === 'card' ? 'Card' : 'Transfer'}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+// ==================== MAIN SCREEN ====================
+
 export default function ProfileScreen() {
   const insets = useSafeAreaInsets();
   const profile = useProfile();
@@ -356,6 +555,13 @@ export default function ProfileScreen() {
           </Text>
           {displayData.email && <Text className="text-base text-white/60">{displayData.email}</Text>}
         </Animated.View>
+
+        {/* Subscription Section */}
+        <Text className="mb-3 text-lg font-semibold text-white">Subscription</Text>
+        <View className="mb-6 gap-3">
+          <SubscriptionCard />
+          <PaymentHistorySection />
+        </View>
 
         {/* Personalization Section */}
         <Text className="mb-3 text-lg font-semibold text-white">Your Plan</Text>

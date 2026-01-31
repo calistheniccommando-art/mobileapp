@@ -3,11 +3,13 @@
  *
  * State management for subscription, trial, and payment flow.
  * Handles plan selection, trial periods, and subscription status.
+ * Syncs with Supabase for persistence across devices.
  */
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { supabase } from '@/lib/supabase/client';
 import type {
   SubscriptionPlanId,
   SubscriptionPlan,
@@ -43,6 +45,8 @@ interface SubscriptionState {
   // UI state
   isProcessingPayment: boolean;
   paymentError: string | null;
+  isSyncing: boolean;
+  lastSyncedAt: string | null;
 
   // Welcome flow state
   hasSeenWelcome: boolean;
@@ -86,6 +90,11 @@ interface SubscriptionState {
   getDaysRemaining: () => number;
   getTrialDaysRemaining: () => number;
 
+  // Supabase sync
+  syncFromSupabase: (userId: string) => Promise<void>;
+  syncToSupabase: (userId: string) => Promise<void>;
+  loadPaymentHistory: (userId: string) => Promise<void>;
+
   // Reset
   resetSubscription: () => void;
 }
@@ -126,6 +135,8 @@ export const useSubscriptionStore = create<SubscriptionState>()(
       shippingAddress: null,
       isProcessingPayment: false,
       paymentError: null,
+      isSyncing: false,
+      lastSyncedAt: null,
       hasSeenWelcome: false,
       hasSeenLanding: false,
       subscriptionDay: 1,
@@ -368,6 +379,137 @@ export const useSubscriptionStore = create<SubscriptionState>()(
         set({ hasCompletedLogin: true });
       },
 
+      // Sync subscription from Supabase (pull)
+      syncFromSupabase: async (userId: string) => {
+        try {
+          set({ isSyncing: true });
+
+          // Fetch user subscription from Supabase
+          const { data: subData, error: subError } = await (supabase
+            .from('user_subscriptions') as any)
+            .select('*')
+            .eq('user_id', userId)
+            .single();
+
+          if (subError && subError.code !== 'PGRST116') {
+            console.error('Failed to fetch subscription:', subError);
+            return;
+          }
+
+          if (subData) {
+            const subscription: UserSubscription = {
+              id: subData.id,
+              planId: subData.plan_id,
+              status: subData.status,
+              startDate: subData.start_date,
+              endDate: subData.end_date,
+              trialStartDate: subData.trial_start_date,
+              trialEndDate: subData.trial_end_date,
+              amountPaid: subData.amount_paid,
+              paymentMethod: subData.channel || 'card',
+              autoRenew: subData.auto_renew,
+              physicalBookShipped: subData.physical_book_shipped || false,
+            };
+
+            set({ subscription, lastSyncedAt: new Date().toISOString() });
+          }
+
+          // Check if user has used trial
+          const { data: userData } = await (supabase
+            .from('users') as any)
+            .select('has_used_trial')
+            .eq('id', userId)
+            .single();
+
+          if (userData) {
+            set({ hasUsedTrial: userData.has_used_trial || false });
+          }
+        } catch (error) {
+          console.error('Sync from Supabase failed:', error);
+        } finally {
+          set({ isSyncing: false });
+        }
+      },
+
+      // Sync subscription to Supabase (push)
+      syncToSupabase: async (userId: string) => {
+        const { subscription, hasUsedTrial, shippingAddress } = get();
+
+        if (!subscription) return;
+
+        try {
+          set({ isSyncing: true });
+
+          const subData = {
+            user_id: userId,
+            plan_id: subscription.planId,
+            status: subscription.status,
+            start_date: subscription.startDate,
+            end_date: subscription.endDate,
+            trial_start_date: subscription.trialStartDate || null,
+            trial_end_date: subscription.trialEndDate || null,
+            amount_paid: subscription.amountPaid,
+            auto_renew: subscription.autoRenew,
+            physical_book_shipped: subscription.physicalBookShipped,
+            shipping_address: shippingAddress ? JSON.stringify(shippingAddress) : null,
+            updated_at: new Date().toISOString(),
+          };
+
+          const { error } = await (supabase
+            .from('user_subscriptions') as any)
+            .upsert(subData, { onConflict: 'user_id' });
+
+          if (error) {
+            console.error('Failed to sync subscription:', error);
+            return;
+          }
+
+          // Update trial usage flag
+          await (supabase
+            .from('users') as any)
+            .update({ has_used_trial: hasUsedTrial })
+            .eq('id', userId);
+
+          set({ lastSyncedAt: new Date().toISOString() });
+        } catch (error) {
+          console.error('Sync to Supabase failed:', error);
+        } finally {
+          set({ isSyncing: false });
+        }
+      },
+
+      // Load payment history from Supabase
+      loadPaymentHistory: async (userId: string) => {
+        try {
+          const { data, error } = await (supabase
+            .from('payment_transactions') as any)
+            .select('*')
+            .eq('user_id', userId)
+            .eq('status', 'success')
+            .order('created_at', { ascending: false });
+
+          if (error) {
+            console.error('Failed to load payment history:', error);
+            return;
+          }
+
+          const payments: PaymentRecord[] = (data || []).map((tx: any) => ({
+            id: tx.id,
+            planId: tx.plan_id,
+            amount: tx.amount / 100, // Convert from kobo
+            currency: tx.currency,
+            status: 'completed' as const,
+            paymentMethod: tx.channel === 'card' ? 'card' as const : 'bank_transfer' as const,
+            transactionReference: tx.reference,
+            paidAt: tx.paid_at || tx.created_at,
+          }));
+
+          set({ payments });
+        } catch (error) {
+          console.error('Failed to load payment history:', error);
+        }
+      },
+
       resetSubscription: () => {
         set({
           subscription: null,
@@ -378,6 +520,8 @@ export const useSubscriptionStore = create<SubscriptionState>()(
           shippingAddress: null,
           isProcessingPayment: false,
           paymentError: null,
+          isSyncing: false,
+          lastSyncedAt: null,
           hasSeenWelcome: false,
           subscriptionDay: 1,
           hasCompletedLogin: false,

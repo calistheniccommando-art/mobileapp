@@ -323,21 +323,32 @@ Currently anyone can access `/admin`. We need:
 6. Create admin user management screen
 
 ### What You Need to Do
-1. **Create your first admin account** via SQL:
+1. **Create your first admin account** - Sign up with email, then run this SQL in Supabase:
    ```sql
-   INSERT INTO admin_users (email, password_hash, role, name)
-   VALUES ('your@email.com', 'hashed_password', 'super_admin', 'Your Name');
+   -- Replace 'your-user-id' with your actual auth.users id
+   UPDATE auth.users 
+   SET raw_user_meta_data = jsonb_set(
+     COALESCE(raw_user_meta_data, '{}'), 
+     '{role}', 
+     '"super_admin"'
+   )
+   WHERE email = 'your@email.com';
    ```
-   (I'll provide a script to hash the password)
 2. **Define who else needs admin access** and their roles
 3. **Test each role** to ensure permissions work correctly
 
 ### Deliverables
-- [ ] `src/app/admin/login.tsx` - Admin login screen
-- [ ] `src/lib/supabase/admin-auth.ts` - Admin auth service
-- [ ] Updated `src/app/admin/_layout.tsx` - Route protection
-- [ ] `src/lib/hooks/use-admin.ts` - Admin role hooks
-- [ ] `src/app/admin/team.tsx` - Admin user management
+- [x] `src/app/admin/login.tsx` - Admin login screen ✅
+- [x] `src/lib/supabase/admin-auth.ts` - Admin auth service ✅
+- [x] Updated `src/app/admin/_layout.tsx` - Route protection ✅
+- [x] `src/lib/hooks/use-admin.ts` - Admin role hooks ✅
+- [x] `src/app/admin/team.tsx` - Admin user management ✅
+
+### ✅ PHASE 3 COMPLETE
+**Completed**: Admin authentication and route protection implemented. To set up your first admin:
+1. Sign up or log in with your email
+2. Run the SQL above in Supabase SQL Editor to grant yourself super_admin role
+3. Access the admin panel at `/admin/login`
 
 ---
 

@@ -15,3 +15,6 @@ export * from './use-fasting-countdown';
 
 // Supabase hooks
 export * from './use-supabase';
+
+// Admin hooks
+export * from './use-admin';

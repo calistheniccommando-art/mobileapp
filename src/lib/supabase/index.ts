@@ -12,6 +12,10 @@ export type { SupabaseClient } from './client';
 export { authService } from './auth';
 export type { AuthResult, SignUpData, SignInData } from './auth';
 
+// Admin Auth service
+export { adminAuthService, ADMIN_ROLES, ROLE_PERMISSIONS } from './admin-auth';
+export type { AdminUser, AdminRole, AdminAuthResult, RolePermissions } from './admin-auth';
+
 // Database service
 export { db, DatabaseError } from './database';
 export {

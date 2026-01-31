@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Platform } from 'react-native';
 import { DarkTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack, useRouter, useSegments } from 'expo-router';
+import { Stack, useRouter, useSegments, usePathname } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -18,6 +18,10 @@ import { useOnboardingCompleted } from '@/lib/state/user-store';
 import { useIsComplete as useCommandoComplete } from '@/lib/state/commando-store';
 import { useSubscriptionStore } from '@/lib/state/subscription-store';
 import { AuthProvider, useAuth, useAuthLoading } from '@/lib/auth/auth-context';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
+import { analytics } from '@/lib/analytics/amplitude';
+import { sentry } from '@/lib/monitoring/sentry';
+import { notificationScheduler } from '@/lib/notifications/scheduler';
 
 export const unstable_settings = {
   initialRouteName: '(tabs)',
@@ -44,7 +48,8 @@ const FitnessTheme = {
 function RootLayoutNav() {
   const router = useRouter();
   const segments = useSegments();
-  const { isAuthenticated } = useAuth();
+  const pathname = usePathname();
+  const { isAuthenticated, user } = useAuth();
   const authLoading = useAuthLoading();
   const legacyOnboardingCompleted = useOnboardingCompleted();
   const commandoOnboardingComplete = useCommandoComplete();
@@ -53,12 +58,57 @@ function RootLayoutNav() {
   const hasSeenLanding = useSubscriptionStore((s) => s.hasSeenLanding);
   const hasCompletedLogin = useSubscriptionStore((s) => s.hasCompletedLogin);
   const [isReady, setIsReady] = useState(false);
+  const [prevPathname, setPrevPathname] = useState<string>('');
 
   // Use either legacy or commando onboarding completion status
   const onboardingCompleted = legacyOnboardingCompleted || commandoOnboardingComplete;
   
   // Consider user logged in if either Supabase auth or legacy login is complete
   const isLoggedIn = isAuthenticated || hasCompletedLogin;
+
+  // Initialize analytics and monitoring
+  useEffect(() => {
+    const initServices = async () => {
+      // Initialize Sentry first for error capture
+      await sentry.initialize();
+      sentry.setupGlobalErrorHandler();
+
+      // Initialize analytics
+      await analytics.initialize();
+      analytics.trackAppOpen();
+
+      // Initialize notification scheduler
+      await notificationScheduler.initialize();
+    };
+
+    initServices();
+
+    // Cleanup on unmount
+    return () => {
+      analytics.shutdown();
+    };
+  }, []);
+
+  // Track user identity when authenticated
+  useEffect(() => {
+    if (user?.id) {
+      analytics.setUserId(user.id);
+      analytics.setUserProperties({ email: user.email || undefined });
+      sentry.setUser(user.id, user.email || undefined);
+    } else {
+      analytics.clearUserData();
+      sentry.clearUser();
+    }
+  }, [user?.id, user?.email]);
+
+  // Track screen views
+  useEffect(() => {
+    if (pathname && pathname !== prevPathname) {
+      analytics.trackScreenView(pathname);
+      sentry.addNavigationBreadcrumb(prevPathname, pathname);
+      setPrevPathname(pathname);
+    }
+  }, [pathname, prevPathname]);
 
   useEffect(() => {
     // Small delay to ensure store is hydrated and auth is loaded
@@ -207,12 +257,14 @@ export default function RootLayout() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <KeyboardProvider>
-            <StatusBar style="light" />
-            <RootLayoutNav />
-          </KeyboardProvider>
-        </GestureHandlerRootView>
+        <ErrorBoundary>
+          <GestureHandlerRootView style={{ flex: 1 }}>
+            <KeyboardProvider>
+              <StatusBar style="light" />
+              <RootLayoutNav />
+            </KeyboardProvider>
+          </GestureHandlerRootView>
+        </ErrorBoundary>
       </AuthProvider>
     </QueryClientProvider>
   );

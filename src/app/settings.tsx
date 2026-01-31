@@ -4,7 +4,7 @@
  * App preferences, subscription management, and account settings
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, Pressable, Alert, Switch } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { BlurView } from 'expo-blur';
@@ -15,6 +15,7 @@ import * as Haptics from 'expo-haptics';
 import {
   ArrowLeft,
   Bell,
+  BellOff,
   Moon,
   Volume2,
   Lock,
@@ -22,7 +23,11 @@ import {
   ChevronRight,
   CreditCard,
   Calendar,
-  Check,
+  Dumbbell,
+  Timer,
+  Utensils,
+  Trophy,
+  Clock,
 } from 'lucide-react-native';
 import { cn } from '@/lib/cn';
 import {
@@ -32,6 +37,11 @@ import {
   useDaysRemaining,
   formatPrice,
 } from '@/lib/state/subscription-store';
+import {
+  pushNotifications,
+  NotificationPreferences,
+} from '@/lib/notifications/push';
+import { notificationScheduler } from '@/lib/notifications/scheduler';
 import { SUBSCRIPTION_PLANS } from '@/types/subscription';
 
 function SettingItem({
@@ -87,9 +97,58 @@ export default function SettingsScreen() {
   const subscriptionStatus = useSubscriptionStatus();
   const daysRemaining = useDaysRemaining();
 
-  const [notificationsEnabled, setNotificationsEnabled] = useState(true);
+  // Notification preferences state
+  const [notificationPrefs, setNotificationPrefs] = useState<NotificationPreferences>({
+    enabled: true,
+    fastingReminders: true,
+    workoutReminders: true,
+    mealReminders: true,
+    milestoneAlerts: true,
+    adminAnnouncements: true,
+    quietHoursEnabled: false,
+    quietHoursStart: '22:00',
+    quietHoursEnd: '07:00',
+  });
   const [darkModeEnabled, setDarkModeEnabled] = useState(true);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [showNotificationDetails, setShowNotificationDetails] = useState(false);
+
+  // Load notification preferences on mount
+  useEffect(() => {
+    loadNotificationPreferences();
+  }, []);
+
+  const loadNotificationPreferences = async () => {
+    const prefs = await pushNotifications.getNotificationPreferences();
+    setNotificationPrefs(prefs);
+  };
+
+  const updateNotificationPref = async (key: keyof NotificationPreferences, value: boolean) => {
+    const newPrefs = { ...notificationPrefs, [key]: value };
+    setNotificationPrefs(newPrefs);
+    await pushNotifications.saveNotificationPreferences({ [key]: value });
+
+    // If enabling main notifications, request permissions
+    if (key === 'enabled' && value) {
+      const hasPermission = await pushNotifications.requestPushPermissions();
+      if (!hasPermission) {
+        Alert.alert(
+          'Notifications Disabled',
+          'Please enable notifications in your device settings to receive reminders.',
+          [{ text: 'OK' }]
+        );
+        setNotificationPrefs({ ...notificationPrefs, enabled: false });
+        return;
+      }
+      // Reschedule all notifications
+      await notificationScheduler.rescheduleAllNotifications();
+    }
+
+    // If disabling, cancel all scheduled notifications
+    if (key === 'enabled' && !value) {
+      await notificationScheduler.cancelAllScheduledNotifications();
+    }
+  };
 
   const isActive = subscriptionStatus === 'active' || subscriptionStatus === 'trial';
   const currentPlan = subscription ? SUBSCRIPTION_PLANS[subscription.planId] : null;
@@ -206,21 +265,104 @@ export default function SettingsScreen() {
         {/* App Preferences */}
         <Text className="mb-3 text-lg font-semibold text-white">App Preferences</Text>
         <View className="mb-6 gap-3">
+          {/* Main Notification Toggle */}
           <SettingItem
-            icon={Bell}
+            icon={notificationPrefs.enabled ? Bell : BellOff}
             title="Notifications"
-            description="Push notifications for workouts and meals"
+            description={notificationPrefs.enabled ? 'Tap to configure' : 'All notifications disabled'}
+            onPress={() => setShowNotificationDetails(!showNotificationDetails)}
             showArrow={false}
             rightElement={
               <Switch
-                value={notificationsEnabled}
-                onValueChange={setNotificationsEnabled}
+                value={notificationPrefs.enabled}
+                onValueChange={(value) => updateNotificationPref('enabled', value)}
                 trackColor={{ false: '#334155', true: '#10b981' }}
-                thumbColor={notificationsEnabled ? '#ffffff' : '#64748b'}
+                thumbColor={notificationPrefs.enabled ? '#ffffff' : '#64748b'}
               />
             }
             delay={100}
           />
+
+          {/* Notification Details */}
+          {showNotificationDetails && notificationPrefs.enabled && (
+            <Animated.View entering={FadeInDown.springify()} className="ml-4 gap-3">
+              <SettingItem
+                icon={Timer}
+                title="Fasting Reminders"
+                description="Start and end of fasting windows"
+                showArrow={false}
+                rightElement={
+                  <Switch
+                    value={notificationPrefs.fastingReminders}
+                    onValueChange={(value) => updateNotificationPref('fastingReminders', value)}
+                    trackColor={{ false: '#334155', true: '#10b981' }}
+                    thumbColor={notificationPrefs.fastingReminders ? '#ffffff' : '#64748b'}
+                  />
+                }
+                delay={110}
+              />
+              <SettingItem
+                icon={Dumbbell}
+                title="Workout Reminders"
+                description="Daily workout notifications"
+                showArrow={false}
+                rightElement={
+                  <Switch
+                    value={notificationPrefs.workoutReminders}
+                    onValueChange={(value) => updateNotificationPref('workoutReminders', value)}
+                    trackColor={{ false: '#334155', true: '#10b981' }}
+                    thumbColor={notificationPrefs.workoutReminders ? '#ffffff' : '#64748b'}
+                  />
+                }
+                delay={120}
+              />
+              <SettingItem
+                icon={Utensils}
+                title="Meal Reminders"
+                description="Meal time notifications"
+                showArrow={false}
+                rightElement={
+                  <Switch
+                    value={notificationPrefs.mealReminders}
+                    onValueChange={(value) => updateNotificationPref('mealReminders', value)}
+                    trackColor={{ false: '#334155', true: '#10b981' }}
+                    thumbColor={notificationPrefs.mealReminders ? '#ffffff' : '#64748b'}
+                  />
+                }
+                delay={130}
+              />
+              <SettingItem
+                icon={Trophy}
+                title="Milestone Alerts"
+                description="Achievements and streak updates"
+                showArrow={false}
+                rightElement={
+                  <Switch
+                    value={notificationPrefs.milestoneAlerts}
+                    onValueChange={(value) => updateNotificationPref('milestoneAlerts', value)}
+                    trackColor={{ false: '#334155', true: '#10b981' }}
+                    thumbColor={notificationPrefs.milestoneAlerts ? '#ffffff' : '#64748b'}
+                  />
+                }
+                delay={140}
+              />
+              <SettingItem
+                icon={Clock}
+                title="Quiet Hours"
+                description={notificationPrefs.quietHoursEnabled ? `${notificationPrefs.quietHoursStart} - ${notificationPrefs.quietHoursEnd}` : 'Disabled'}
+                showArrow={false}
+                rightElement={
+                  <Switch
+                    value={notificationPrefs.quietHoursEnabled}
+                    onValueChange={(value) => updateNotificationPref('quietHoursEnabled', value)}
+                    trackColor={{ false: '#334155', true: '#10b981' }}
+                    thumbColor={notificationPrefs.quietHoursEnabled ? '#ffffff' : '#64748b'}
+                  />
+                }
+                delay={150}
+              />
+            </Animated.View>
+          )}
           <SettingItem
             icon={Moon}
             title="Dark Mode"

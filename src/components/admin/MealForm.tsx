@@ -40,6 +40,8 @@ import {
   DIETARY_TAG_LABELS,
   GOAL_LABELS,
 } from '@/lib/supabase/meals';
+import { YouTubeInput } from './YouTubeInput';
+import { ImageUploader } from './ImageUploader';
 
 interface MealFormProps {
   meal?: Meal | null;
@@ -534,31 +536,33 @@ export function MealForm({ meal, onSubmit, onCancel, isLoading }: MealFormProps)
         <View className="space-y-4 pt-4 border-t border-gray-200">
           <Text className="text-lg font-semibold text-gray-800">Media</Text>
           
+          {/* Meal Image - Using new ImageUploader */}
           <View>
             <View className="flex-row items-center mb-1">
               <ImageIcon size={16} color="#6B7280" />
-              <Text className="text-sm font-medium text-gray-700 ml-2">Image URL</Text>
+              <Text className="text-sm font-medium text-gray-700 ml-2">Meal Photo</Text>
             </View>
-            <TextInput
+            <ImageUploader
               value={imageUrl}
-              onChangeText={setImageUrl}
-              placeholder="https://example.com/meal-image.jpg"
-              className="border border-gray-300 rounded-lg px-4 py-3 text-base"
+              onChange={(url) => setImageUrl(url || '')}
+              bucket="meal-images"
+              prefix="meals"
+              aspectRatio={16 / 9}
+              maxWidth={350}
+              placeholder="Upload a photo of the meal"
+              showPreview={true}
             />
           </View>
 
-          <View>
-            <View className="flex-row items-center mb-1">
-              <Video size={16} color="#6B7280" />
-              <Text className="text-sm font-medium text-gray-700 ml-2">Video URL</Text>
-            </View>
-            <TextInput
-              value={videoUrl}
-              onChangeText={setVideoUrl}
-              placeholder="https://youtube.com/watch?v=..."
-              className="border border-gray-300 rounded-lg px-4 py-3 text-base"
-            />
-          </View>
+          {/* Recipe Video - Using new YouTubeInput */}
+          <YouTubeInput
+            value={videoUrl}
+            onChange={setVideoUrl}
+            label="Recipe Video"
+            placeholder="Paste YouTube URL for cooking tutorial"
+            showPreview={true}
+            validateOnChange={true}
+          />
         </View>
 
         {/* Tags Section */}

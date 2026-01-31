@@ -24,6 +24,7 @@ import {
   Clock,
   Flame,
   AlertCircle,
+  Image as ImageIcon,
 } from 'lucide-react-native';
 import { cn } from '@/lib/cn';
 import type { Exercise, ExerciseInsert, ExerciseUpdate } from '@/lib/supabase/exercises';
@@ -34,6 +35,8 @@ import {
   MUSCLE_GROUP_COLORS,
 } from '@/lib/supabase/exercises';
 import type { MuscleGroup, ExerciseType, FitnessLevel } from '@/lib/supabase/types';
+import { YouTubeInput } from './YouTubeInput';
+import { ImageUploader } from './ImageUploader';
 
 // ==================== TYPES ====================
 
@@ -464,31 +467,34 @@ export default function ExerciseForm({
           Media
         </Text>
 
-        <View className="mb-6">
-          {/* YouTube Video */}
-          <View className="mb-4">
-            <View className="flex-row items-center gap-2 mb-2">
-              <Youtube size={14} color="#ef4444" />
-              <Text className="text-sm font-medium text-slate-300">YouTube Video</Text>
-            </View>
-            <TextInput
-              value={youtubeVideoId}
-              onChangeText={setYoutubeVideoId}
-              placeholder="Video URL or ID (e.g., youtube.com/watch?v=...)"
-              placeholderTextColor="#64748b"
-              className="rounded-xl border border-slate-600 bg-slate-800 px-4 py-3 text-white"
-            />
-          </View>
+        <View className="mb-6 gap-6">
+          {/* YouTube Video - Using new YouTubeInput component */}
+          <YouTubeInput
+            value={youtubeVideoId}
+            onChange={setYoutubeVideoId}
+            label="Exercise Demo Video"
+            placeholder="Paste YouTube URL or video ID"
+            showPreview={true}
+            validateOnChange={true}
+          />
 
-          {/* Thumbnail */}
+          {/* Thumbnail - Using new ImageUploader component */}
           <View>
-            <Text className="mb-2 text-sm font-medium text-slate-300">Thumbnail URL</Text>
-            <TextInput
+            <View className="flex-row items-center gap-2 mb-2">
+              <ImageIcon size={16} color="#64748b" />
+              <Text className="text-sm font-medium text-white">
+                Custom Thumbnail
+              </Text>
+              <Text className="text-xs text-slate-500">(Optional - uses video thumbnail by default)</Text>
+            </View>
+            <ImageUploader
               value={thumbnailUrl}
-              onChangeText={setThumbnailUrl}
-              placeholder="https://..."
-              placeholderTextColor="#64748b"
-              className="rounded-xl border border-slate-600 bg-slate-800 px-4 py-3 text-white"
+              onChange={(url) => setThumbnailUrl(url || '')}
+              bucket="exercise-images"
+              prefix="thumbnails"
+              aspectRatio={16 / 9}
+              maxWidth={300}
+              showPreview={true}
             />
           </View>
         </View>

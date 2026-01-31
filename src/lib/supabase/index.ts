@@ -104,5 +104,30 @@ export type {
   FastingListResult,
 } from './fasting';
 
+// Storage service
+export { storage } from './storage';
+export {
+  uploadFile,
+  uploadImage,
+  uploadMealImage,
+  uploadExerciseImage,
+  uploadThumbnail,
+  uploadAvatar,
+  deleteFile,
+  deleteFiles,
+  listFiles,
+  getPublicUrl,
+  getResizedImageUrl,
+  validateFile,
+  generateFilePath,
+  STORAGE_BUCKETS,
+} from './storage';
+export type {
+  StorageBucket,
+  UploadOptions,
+  UploadResult,
+  ImageMetadata,
+} from './storage';
+
 // Types
 export * from './types';

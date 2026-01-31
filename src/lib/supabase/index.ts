@@ -22,13 +22,42 @@ export {
   userService,
   onboardingService,
   planService,
-  exerciseService,
+  exerciseService as dbExerciseService,
   workoutTemplateService,
   mealService,
   dailyProgressService,
   subscriptionService,
   auditLogService,
 } from './database';
+
+// Exercise CRUD service (admin)
+export { exerciseService } from './exercises';
+export {
+  MUSCLE_GROUP_LABELS,
+  EXERCISE_TYPE_LABELS,
+  DIFFICULTY_LABELS,
+  MUSCLE_GROUP_COLORS,
+} from './exercises';
+export type {
+  Exercise,
+  ExerciseInsert,
+  ExerciseUpdate,
+  ExerciseFilters,
+  ExerciseListOptions,
+  ExerciseListResult,
+} from './exercises';
+
+// Workout CRUD service (admin)
+export { workoutService } from './workouts';
+export type {
+  WorkoutTemplate,
+  WorkoutTemplateInsert,
+  WorkoutTemplateUpdate,
+  WorkoutTemplateWithExercises,
+  WorkoutFilters,
+  WorkoutListOptions,
+  WorkoutListResult,
+} from './workouts';
 
 // Types
 export * from './types';

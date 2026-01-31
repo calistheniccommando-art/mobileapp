@@ -1,6 +1,6 @@
 /**
- * ADMIN WORKOUTS SCREEN
- * Full CRUD interface for workout template management
+ * ADMIN EXERCISES SCREEN
+ * Full CRUD interface for exercise library management
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -28,27 +28,23 @@ import {
   AlertCircle,
   CheckCircle,
   X,
-  Clock,
-  Flame,
-  Users,
+  Youtube,
 } from 'lucide-react-native';
 import { cn } from '@/lib/cn';
 import { useAdminPermissions } from '@/lib/hooks/use-admin';
 import {
-  workoutService,
-  type WorkoutTemplate,
-  type WorkoutTemplateWithExercises,
-  type WorkoutFilters,
-  type WorkoutTemplateInsert,
-  type WorkoutTemplateUpdate,
-} from '@/lib/supabase/workouts';
-import {
+  exerciseService,
   MUSCLE_GROUP_LABELS,
+  EXERCISE_TYPE_LABELS,
   DIFFICULTY_LABELS,
   MUSCLE_GROUP_COLORS,
+  type Exercise,
+  type ExerciseFilters,
+  type ExerciseInsert,
+  type ExerciseUpdate,
 } from '@/lib/supabase/exercises';
-import type { MuscleGroup, FitnessLevel } from '@/lib/supabase/types';
-import WorkoutBuilder from '@/components/admin/WorkoutBuilder';
+import type { MuscleGroup, ExerciseType, FitnessLevel } from '@/lib/supabase/types';
+import ExerciseForm from '@/components/admin/ExerciseForm';
 
 // ==================== CONSTANTS ====================
 
@@ -57,15 +53,17 @@ const MUSCLE_GROUPS: MuscleGroup[] = [
   'legs', 'core', 'glutes', 'full_body', 'cardio'
 ];
 
+const EXERCISE_TYPES: ExerciseType[] = ['strength', 'cardio', 'flexibility', 'hiit'];
+
 const DIFFICULTY_LEVELS: FitnessLevel[] = ['beginner', 'intermediate', 'advanced'];
 
 // ==================== COMPONENT ====================
 
-export default function AdminWorkoutsScreen() {
+export default function AdminExercisesScreen() {
   const permissions = useAdminPermissions();
 
   // Data state
-  const [workouts, setWorkouts] = useState<WorkoutTemplateWithExercises[]>([]);
+  const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -78,14 +76,14 @@ export default function AdminWorkoutsScreen() {
   // Filters
   const [search, setSearch] = useState('');
   const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState<WorkoutFilters>({});
+  const [filters, setFilters] = useState<ExerciseFilters>({});
 
   // Selection
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   // Modal state
-  const [showBuilder, setShowBuilder] = useState(false);
-  const [editingWorkout, setEditingWorkout] = useState<WorkoutTemplateWithExercises | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [editingExercise, setEditingExercise] = useState<Exercise | null>(null);
   const [formLoading, setFormLoading] = useState(false);
 
   // Action menu
@@ -94,53 +92,31 @@ export default function AdminWorkoutsScreen() {
   // Toast state
   const [toast, setToast] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
-  // Stats
-  const [stats, setStats] = useState<{
-    total: number;
-    active: number;
-    inactive: number;
-    byDifficulty: Record<FitnessLevel, number>;
-    averageDuration: number;
-    averageExerciseCount: number;
-  } | null>(null);
-
-  // Load workouts
-  const loadWorkouts = useCallback(async () => {
+  // Load exercises
+  const loadExercises = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const result = await workoutService.list({
+      const result = await exerciseService.list({
         filters: { ...filters, search: search || undefined },
         page,
         pageSize,
         orderBy: 'name',
         orderDirection: 'asc',
-        includeExercises: true,
       });
-      setWorkouts(result.workouts as WorkoutTemplateWithExercises[]);
+      setExercises(result.exercises);
       setTotalPages(result.totalPages);
       setTotal(result.total);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load workouts');
+      setError(err instanceof Error ? err.message : 'Failed to load exercises');
     } finally {
       setLoading(false);
     }
   }, [filters, search, page]);
 
-  // Load stats
-  const loadStats = useCallback(async () => {
-    try {
-      const data = await workoutService.getStats();
-      setStats(data);
-    } catch (err) {
-      console.error('Failed to load stats:', err);
-    }
-  }, []);
-
   useEffect(() => {
-    loadWorkouts();
-    loadStats();
-  }, [loadWorkouts, loadStats]);
+    loadExercises();
+  }, [loadExercises]);
 
   // Debounced search
   useEffect(() => {
@@ -158,32 +134,31 @@ export default function AdminWorkoutsScreen() {
 
   // CRUD handlers
   const handleCreate = () => {
-    setEditingWorkout(null);
-    setShowBuilder(true);
+    setEditingExercise(null);
+    setShowForm(true);
   };
 
-  const handleEdit = async (workout: WorkoutTemplateWithExercises) => {
-    setEditingWorkout(workout);
-    setShowBuilder(true);
+  const handleEdit = (exercise: Exercise) => {
+    setEditingExercise(exercise);
+    setShowForm(true);
     setActionMenuId(null);
   };
 
-  const handleSave = async (data: WorkoutTemplateInsert | WorkoutTemplateUpdate) => {
+  const handleSave = async (data: ExerciseInsert | ExerciseUpdate) => {
     setFormLoading(true);
     try {
-      if (editingWorkout) {
-        await workoutService.update(editingWorkout.id, data as WorkoutTemplateUpdate);
-        showToast('success', 'Workout updated successfully');
+      if (editingExercise) {
+        await exerciseService.update(editingExercise.id, data as ExerciseUpdate);
+        showToast('success', 'Exercise updated successfully');
       } else {
-        await workoutService.create(data as WorkoutTemplateInsert);
-        showToast('success', 'Workout created successfully');
+        await exerciseService.create(data as ExerciseInsert);
+        showToast('success', 'Exercise created successfully');
       }
-      setShowBuilder(false);
-      setEditingWorkout(null);
-      loadWorkouts();
-      loadStats();
+      setShowForm(false);
+      setEditingExercise(null);
+      loadExercises();
     } catch (err) {
-      showToast('error', err instanceof Error ? err.message : 'Failed to save workout');
+      showToast('error', err instanceof Error ? err.message : 'Failed to save exercise');
     } finally {
       setFormLoading(false);
     }
@@ -191,10 +166,9 @@ export default function AdminWorkoutsScreen() {
 
   const handleDelete = async (id: string) => {
     try {
-      await workoutService.softDelete(id);
-      showToast('success', 'Workout deleted');
-      loadWorkouts();
-      loadStats();
+      await exerciseService.softDelete(id);
+      showToast('success', 'Exercise deleted');
+      loadExercises();
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Failed to delete');
     }
@@ -203,10 +177,9 @@ export default function AdminWorkoutsScreen() {
 
   const handleRestore = async (id: string) => {
     try {
-      await workoutService.restore(id);
-      showToast('success', 'Workout restored');
-      loadWorkouts();
-      loadStats();
+      await exerciseService.restore(id);
+      showToast('success', 'Exercise restored');
+      loadExercises();
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Failed to restore');
     }
@@ -215,14 +188,25 @@ export default function AdminWorkoutsScreen() {
 
   const handleDuplicate = async (id: string) => {
     try {
-      await workoutService.duplicate(id);
-      showToast('success', 'Workout duplicated');
-      loadWorkouts();
-      loadStats();
+      await exerciseService.duplicate(id);
+      showToast('success', 'Exercise duplicated');
+      loadExercises();
     } catch (err) {
       showToast('error', err instanceof Error ? err.message : 'Failed to duplicate');
     }
     setActionMenuId(null);
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    try {
+      await exerciseService.bulkSoftDelete(Array.from(selectedIds));
+      showToast('success', `${selectedIds.size} exercises deleted`);
+      setSelectedIds(new Set());
+      loadExercises();
+    } catch (err) {
+      showToast('error', err instanceof Error ? err.message : 'Failed to delete');
+    }
   };
 
   // Toggle selection
@@ -239,10 +223,10 @@ export default function AdminWorkoutsScreen() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedIds.size === workouts.length) {
+    if (selectedIds.size === exercises.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(workouts.map(w => w.id)));
+      setSelectedIds(new Set(exercises.map(e => e.id)));
     }
   };
 
@@ -257,63 +241,22 @@ export default function AdminWorkoutsScreen() {
 
   return (
     <View className="flex-1 p-6">
-      {/* Stats Cards */}
-      {stats && (
-        <View className="mb-6 flex-row gap-4">
-          <View className="flex-1 rounded-xl bg-slate-800 border border-slate-700 p-4">
-            <View className="flex-row items-center gap-2 mb-2">
-              <Dumbbell size={18} color="#8b5cf6" />
-              <Text className="text-slate-400">Total Workouts</Text>
-            </View>
-            <Text className="text-2xl font-bold text-white">{stats.total}</Text>
-            <Text className="text-xs text-slate-500">
-              {stats.active} active, {stats.inactive} inactive
-            </Text>
-          </View>
-          <View className="flex-1 rounded-xl bg-slate-800 border border-slate-700 p-4">
-            <View className="flex-row items-center gap-2 mb-2">
-              <Clock size={18} color="#10b981" />
-              <Text className="text-slate-400">Avg Duration</Text>
-            </View>
-            <Text className="text-2xl font-bold text-white">{stats.averageDuration} min</Text>
-          </View>
-          <View className="flex-1 rounded-xl bg-slate-800 border border-slate-700 p-4">
-            <View className="flex-row items-center gap-2 mb-2">
-              <Users size={18} color="#f59e0b" />
-              <Text className="text-slate-400">Avg Exercises</Text>
-            </View>
-            <Text className="text-2xl font-bold text-white">{stats.averageExerciseCount}</Text>
-          </View>
-          <View className="flex-1 rounded-xl bg-slate-800 border border-slate-700 p-4">
-            <View className="flex-row items-center gap-2 mb-2">
-              <Flame size={18} color="#ef4444" />
-              <Text className="text-slate-400">By Difficulty</Text>
-            </View>
-            <View className="flex-row gap-2">
-              <Text className="text-xs text-emerald-400">B: {stats.byDifficulty.beginner || 0}</Text>
-              <Text className="text-xs text-yellow-400">I: {stats.byDifficulty.intermediate || 0}</Text>
-              <Text className="text-xs text-rose-400">A: {stats.byDifficulty.advanced || 0}</Text>
-            </View>
-          </View>
-        </View>
-      )}
-
       {/* Header */}
       <View className="mb-6 flex-row items-center justify-between">
         <View>
-          <Text className="text-2xl font-bold text-white">Workouts</Text>
+          <Text className="text-2xl font-bold text-white">Exercises</Text>
           <Text className="text-slate-400">
-            {total} workout template{total !== 1 ? 's' : ''}
+            {total} exercise{total !== 1 ? 's' : ''} in library
           </Text>
         </View>
 
         {permissions.canEdit && (
           <Pressable
             onPress={handleCreate}
-            className="flex-row items-center gap-2 rounded-xl bg-violet-500 px-4 py-3"
+            className="flex-row items-center gap-2 rounded-xl bg-emerald-500 px-4 py-3"
           >
             <Plus size={18} color="#fff" />
-            <Text className="font-semibold text-white">Create Workout</Text>
+            <Text className="font-semibold text-white">Add Exercise</Text>
           </Pressable>
         )}
       </View>
@@ -326,7 +269,7 @@ export default function AdminWorkoutsScreen() {
           <TextInput
             value={search}
             onChangeText={setSearch}
-            placeholder="Search workouts..."
+            placeholder="Search exercises..."
             placeholderTextColor="#64748b"
             className="ml-3 flex-1 text-white"
           />
@@ -355,6 +298,17 @@ export default function AdminWorkoutsScreen() {
             <View className="h-2 w-2 rounded-full bg-violet-500" />
           )}
         </Pressable>
+
+        {/* Bulk actions */}
+        {selectedIds.size > 0 && permissions.canEdit && (
+          <Pressable
+            onPress={handleBulkDelete}
+            className="flex-row items-center gap-2 rounded-xl bg-rose-500/20 border border-rose-500 px-4 py-3"
+          >
+            <Trash2 size={18} color="#f43f5e" />
+            <Text className="text-rose-400">Delete ({selectedIds.size})</Text>
+          </Pressable>
+        )}
       </View>
 
       {/* Filter panel */}
@@ -386,9 +340,35 @@ export default function AdminWorkoutsScreen() {
             </View>
           </View>
 
+          {/* Exercise Type */}
+          <View className="mb-4">
+            <Text className="mb-2 text-sm font-medium text-slate-400">Exercise Type</Text>
+            <View className="flex-row flex-wrap gap-2">
+              {EXERCISE_TYPES.map(type => (
+                <Pressable
+                  key={type}
+                  onPress={() => setFilters(f => ({
+                    ...f,
+                    exerciseType: f.exerciseType === type ? undefined : type
+                  }))}
+                  className={cn(
+                    'rounded-lg px-3 py-2 border',
+                    filters.exerciseType === type
+                      ? 'bg-emerald-500/20 border-emerald-500'
+                      : 'bg-slate-700 border-transparent'
+                  )}
+                >
+                  <Text className={filters.exerciseType === type ? 'text-emerald-400' : 'text-slate-300'}>
+                    {EXERCISE_TYPE_LABELS[type]}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+
           {/* Muscle Groups */}
           <View className="mb-4">
-            <Text className="mb-2 text-sm font-medium text-slate-400">Target Muscle Groups</Text>
+            <Text className="mb-2 text-sm font-medium text-slate-400">Muscle Groups</Text>
             <View className="flex-row flex-wrap gap-2">
               {MUSCLE_GROUPS.map(mg => {
                 const isSelected = filters.muscleGroups?.includes(mg);
@@ -453,36 +433,6 @@ export default function AdminWorkoutsScreen() {
             </View>
           </View>
 
-          {/* Duration Range */}
-          <View className="mb-4">
-            <Text className="mb-2 text-sm font-medium text-slate-400">Duration (minutes)</Text>
-            <View className="flex-row gap-3">
-              <TextInput
-                value={filters.minDuration?.toString() || ''}
-                onChangeText={(v) => setFilters(f => ({
-                  ...f,
-                  minDuration: v ? parseInt(v) : undefined
-                }))}
-                placeholder="Min"
-                placeholderTextColor="#64748b"
-                keyboardType="number-pad"
-                className="flex-1 rounded-lg bg-slate-700 px-3 py-2 text-white"
-              />
-              <Text className="text-slate-400 self-center">to</Text>
-              <TextInput
-                value={filters.maxDuration?.toString() || ''}
-                onChangeText={(v) => setFilters(f => ({
-                  ...f,
-                  maxDuration: v ? parseInt(v) : undefined
-                }))}
-                placeholder="Max"
-                placeholderTextColor="#64748b"
-                keyboardType="number-pad"
-                className="flex-1 rounded-lg bg-slate-700 px-3 py-2 text-white"
-              />
-            </View>
-          </View>
-
           {/* Clear filters */}
           {hasActiveFilters && (
             <Pressable onPress={clearFilters} className="self-start">
@@ -504,14 +454,14 @@ export default function AdminWorkoutsScreen() {
       {loading ? (
         <View className="flex-1 items-center justify-center py-12">
           <ActivityIndicator size="large" color="#8b5cf6" />
-          <Text className="mt-4 text-slate-400">Loading workouts...</Text>
+          <Text className="mt-4 text-slate-400">Loading exercises...</Text>
         </View>
-      ) : workouts.length === 0 ? (
+      ) : exercises.length === 0 ? (
         <View className="flex-1 items-center justify-center py-12">
           <Dumbbell size={48} color="#64748b" />
-          <Text className="mt-4 text-lg text-slate-400">No workouts found</Text>
+          <Text className="mt-4 text-lg text-slate-400">No exercises found</Text>
           <Text className="text-slate-500">
-            {hasActiveFilters ? 'Try adjusting your filters' : 'Create your first workout to get started'}
+            {hasActiveFilters ? 'Try adjusting your filters' : 'Add your first exercise to get started'}
           </Text>
         </View>
       ) : (
@@ -521,19 +471,18 @@ export default function AdminWorkoutsScreen() {
             <Pressable onPress={toggleSelectAll} className="mr-4">
               <View className={cn(
                 'h-5 w-5 rounded border',
-                selectedIds.size === workouts.length
+                selectedIds.size === exercises.length
                   ? 'bg-violet-500 border-violet-500'
                   : 'border-slate-500'
               )}>
-                {selectedIds.size === workouts.length && (
+                {selectedIds.size === exercises.length && (
                   <CheckCircle size={18} color="#fff" />
                 )}
               </View>
             </Pressable>
-            <Text className="flex-1 text-sm font-medium text-slate-400">Workout</Text>
+            <Text className="flex-1 text-sm font-medium text-slate-400">Exercise</Text>
+            <Text className="w-24 text-sm font-medium text-slate-400">Type</Text>
             <Text className="w-28 text-sm font-medium text-slate-400">Difficulty</Text>
-            <Text className="w-24 text-sm font-medium text-slate-400">Duration</Text>
-            <Text className="w-24 text-sm font-medium text-slate-400">Exercises</Text>
             <Text className="w-32 text-sm font-medium text-slate-400">Muscles</Text>
             <Text className="w-20 text-sm font-medium text-slate-400">Status</Text>
             <Text className="w-16 text-sm font-medium text-slate-400"></Text>
@@ -541,23 +490,23 @@ export default function AdminWorkoutsScreen() {
 
           {/* Table Body */}
           <ScrollView className="flex-1 border-x border-slate-700">
-            {workouts.map((workout) => (
+            {exercises.map((exercise, index) => (
               <View
-                key={workout.id}
+                key={exercise.id}
                 className={cn(
                   'flex-row items-center border-b border-slate-700 px-4 py-3',
-                  selectedIds.has(workout.id) && 'bg-violet-500/10'
+                  selectedIds.has(exercise.id) && 'bg-violet-500/10'
                 )}
               >
                 {/* Checkbox */}
-                <Pressable onPress={() => toggleSelect(workout.id)} className="mr-4">
+                <Pressable onPress={() => toggleSelect(exercise.id)} className="mr-4">
                   <View className={cn(
                     'h-5 w-5 rounded border',
-                    selectedIds.has(workout.id)
+                    selectedIds.has(exercise.id)
                       ? 'bg-violet-500 border-violet-500'
                       : 'border-slate-500'
                   )}>
-                    {selectedIds.has(workout.id) && (
+                    {selectedIds.has(exercise.id) && (
                       <CheckCircle size={18} color="#fff" />
                     )}
                   </View>
@@ -565,9 +514,21 @@ export default function AdminWorkoutsScreen() {
 
                 {/* Name & Description */}
                 <View className="flex-1">
-                  <Text className="font-medium text-white">{workout.name}</Text>
+                  <View className="flex-row items-center gap-2">
+                    <Text className="font-medium text-white">{exercise.name}</Text>
+                    {exercise.youtube_video_id && (
+                      <Youtube size={14} color="#ef4444" />
+                    )}
+                  </View>
                   <Text className="text-sm text-slate-400" numberOfLines={1}>
-                    {workout.description}
+                    {exercise.description}
+                  </Text>
+                </View>
+
+                {/* Type */}
+                <View className="w-24">
+                  <Text className="text-sm text-slate-300">
+                    {EXERCISE_TYPE_LABELS[exercise.exercise_type]}
                   </Text>
                 </View>
 
@@ -575,47 +536,32 @@ export default function AdminWorkoutsScreen() {
                 <View className="w-28">
                   <View className={cn(
                     'self-start rounded-lg px-2 py-1',
-                    workout.difficulty === 'beginner' && 'bg-emerald-500/20',
-                    workout.difficulty === 'intermediate' && 'bg-yellow-500/20',
-                    workout.difficulty === 'advanced' && 'bg-rose-500/20'
+                    exercise.difficulty === 'beginner' && 'bg-emerald-500/20',
+                    exercise.difficulty === 'intermediate' && 'bg-yellow-500/20',
+                    exercise.difficulty === 'advanced' && 'bg-rose-500/20'
                   )}>
                     <Text className={cn(
                       'text-xs font-medium',
-                      workout.difficulty === 'beginner' && 'text-emerald-400',
-                      workout.difficulty === 'intermediate' && 'text-yellow-400',
-                      workout.difficulty === 'advanced' && 'text-rose-400'
+                      exercise.difficulty === 'beginner' && 'text-emerald-400',
+                      exercise.difficulty === 'intermediate' && 'text-yellow-400',
+                      exercise.difficulty === 'advanced' && 'text-rose-400'
                     )}>
-                      {DIFFICULTY_LABELS[workout.difficulty]}
+                      {DIFFICULTY_LABELS[exercise.difficulty]}
                     </Text>
                   </View>
                 </View>
 
-                {/* Duration */}
-                <View className="w-24 flex-row items-center gap-1">
-                  <Clock size={14} color="#64748b" />
-                  <Text className="text-sm text-slate-300">
-                    {workout.estimated_duration_minutes} min
-                  </Text>
-                </View>
-
-                {/* Exercise Count */}
-                <View className="w-24">
-                  <Text className="text-sm text-slate-300">
-                    {workout.exercise_order.length} exercises
-                  </Text>
-                </View>
-
                 {/* Muscles */}
                 <View className="w-32 flex-row flex-wrap gap-1">
-                  {workout.target_muscle_groups.slice(0, 2).map(mg => (
+                  {exercise.muscle_groups.slice(0, 2).map(mg => (
                     <View key={mg} className={cn('rounded px-1.5 py-0.5', MUSCLE_GROUP_COLORS[mg].bg)}>
                       <Text className={cn('text-xs', MUSCLE_GROUP_COLORS[mg].text)}>
                         {MUSCLE_GROUP_LABELS[mg]}
                       </Text>
                     </View>
                   ))}
-                  {workout.target_muscle_groups.length > 2 && (
-                    <Text className="text-xs text-slate-400">+{workout.target_muscle_groups.length - 2}</Text>
+                  {exercise.muscle_groups.length > 2 && (
+                    <Text className="text-xs text-slate-400">+{exercise.muscle_groups.length - 2}</Text>
                   )}
                 </View>
 
@@ -623,13 +569,13 @@ export default function AdminWorkoutsScreen() {
                 <View className="w-20">
                   <View className={cn(
                     'self-start rounded-full px-2 py-1',
-                    workout.is_active ? 'bg-emerald-500/20' : 'bg-slate-700'
+                    exercise.is_active ? 'bg-emerald-500/20' : 'bg-slate-700'
                   )}>
                     <Text className={cn(
                       'text-xs',
-                      workout.is_active ? 'text-emerald-400' : 'text-slate-400'
+                      exercise.is_active ? 'text-emerald-400' : 'text-slate-400'
                     )}>
-                      {workout.is_active ? 'Active' : 'Inactive'}
+                      {exercise.is_active ? 'Active' : 'Inactive'}
                     </Text>
                   </View>
                 </View>
@@ -637,26 +583,26 @@ export default function AdminWorkoutsScreen() {
                 {/* Actions */}
                 <View className="w-16 relative">
                   <Pressable
-                    onPress={() => setActionMenuId(actionMenuId === workout.id ? null : workout.id)}
+                    onPress={() => setActionMenuId(actionMenuId === exercise.id ? null : exercise.id)}
                     className="p-2 rounded-lg hover:bg-slate-700"
                   >
                     <MoreVertical size={18} color="#94a3b8" />
                   </Pressable>
 
                   {/* Action menu */}
-                  {actionMenuId === workout.id && (
+                  {actionMenuId === exercise.id && (
                     <View className="absolute right-0 top-10 z-10 w-40 rounded-xl bg-slate-800 border border-slate-700 shadow-lg overflow-hidden">
                       {permissions.canEdit && (
                         <>
                           <Pressable
-                            onPress={() => handleEdit(workout)}
+                            onPress={() => handleEdit(exercise)}
                             className="flex-row items-center gap-2 px-4 py-3 hover:bg-slate-700"
                           >
                             <Edit3 size={16} color="#94a3b8" />
                             <Text className="text-slate-300">Edit</Text>
                           </Pressable>
                           <Pressable
-                            onPress={() => handleDuplicate(workout.id)}
+                            onPress={() => handleDuplicate(exercise.id)}
                             className="flex-row items-center gap-2 px-4 py-3 hover:bg-slate-700"
                           >
                             <Copy size={16} color="#94a3b8" />
@@ -665,9 +611,9 @@ export default function AdminWorkoutsScreen() {
                         </>
                       )}
                       {permissions.canEdit && (
-                        workout.is_active ? (
+                        exercise.is_active ? (
                           <Pressable
-                            onPress={() => handleDelete(workout.id)}
+                            onPress={() => handleDelete(exercise.id)}
                             className="flex-row items-center gap-2 px-4 py-3 hover:bg-rose-500/20"
                           >
                             <Trash2 size={16} color="#f43f5e" />
@@ -675,7 +621,7 @@ export default function AdminWorkoutsScreen() {
                           </Pressable>
                         ) : (
                           <Pressable
-                            onPress={() => handleRestore(workout.id)}
+                            onPress={() => handleRestore(exercise.id)}
                             className="flex-row items-center gap-2 px-4 py-3 hover:bg-emerald-500/20"
                           >
                             <RotateCcw size={16} color="#10b981" />
@@ -724,22 +670,21 @@ export default function AdminWorkoutsScreen() {
         </>
       )}
 
-      {/* Workout Builder Modal */}
+      {/* Exercise Form Modal */}
       <Modal
-        visible={showBuilder}
+        visible={showForm}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowBuilder(false)}
+        onRequestClose={() => setShowForm(false)}
       >
         <View className="flex-1 items-center justify-center bg-black/70 p-4">
-          <View className="w-full max-w-3xl" style={{ maxHeight: '90%' }}>
-            <WorkoutBuilder
-              workout={editingWorkout}
-              initialExercises={editingWorkout?.exercises || []}
+          <View className="w-full max-w-2xl" style={{ maxHeight: '90%' }}>
+            <ExerciseForm
+              exercise={editingExercise}
               onSave={handleSave}
               onCancel={() => {
-                setShowBuilder(false);
-                setEditingWorkout(null);
+                setShowForm(false);
+                setEditingExercise(null);
               }}
               isLoading={formLoading}
             />

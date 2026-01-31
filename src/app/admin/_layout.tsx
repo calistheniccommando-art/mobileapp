@@ -23,6 +23,7 @@ import {
   Shield,
   History,
   UsersRound,
+  ListChecks,
 } from 'lucide-react-native';
 import { cn } from '@/lib/cn';
 import { useAdmin, useAdminPermissions, ROLE_DISPLAY_NAMES, ROLE_COLORS } from '@/lib/hooks/use-admin';
@@ -31,6 +32,7 @@ import { useAdmin, useAdminPermissions, ROLE_DISPLAY_NAMES, ROLE_COLORS } from '
 const NAV_ITEMS = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, path: '/admin', permission: 'canView' },
   { id: 'users', label: 'Users', icon: Users, path: '/admin/users', permission: 'canManageUsers' },
+  { id: 'exercises', label: 'Exercises', icon: ListChecks, path: '/admin/exercises', permission: 'canView' },
   { id: 'workouts', label: 'Workouts', icon: Dumbbell, path: '/admin/workouts', permission: 'canView' },
   { id: 'meals', label: 'Meals', icon: Utensils, path: '/admin/meals', permission: 'canView' },
   { id: 'fasting', label: 'Fasting Plans', icon: Timer, path: '/admin/fasting', permission: 'canView' },
@@ -271,17 +273,18 @@ export default function AdminLayout() {
     router.replace('/admin/login');
   };
 
-  // Show loading while checking auth
-  if (isLoading && !isLoginPage) {
-    return <LoadingScreen />;
-  }
-
   // If not authenticated and not on login page, redirect to login
+  // This useEffect MUST be before any conditional returns (Rules of Hooks)
   useEffect(() => {
     if (!isLoading && !isAuthenticated && !isLoginPage) {
       router.replace('/admin/login');
     }
   }, [isLoading, isAuthenticated, isLoginPage]);
+
+  // Show loading while checking auth
+  if (isLoading && !isLoginPage) {
+    return <LoadingScreen />;
+  }
 
   // If on login page, just show the login screen (no sidebar)
   if (isLoginPage) {

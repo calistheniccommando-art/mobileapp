@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Platform } from 'react-native';
 import { Tabs } from 'expo-router';
 import { BlurView } from 'expo-blur';
-import { Home, Dumbbell, Utensils, User } from 'lucide-react-native';
+import { Home, Dumbbell, Utensils, User, ShoppingBag } from 'lucide-react-native';
 import * as Haptics from 'expo-haptics';
 
 function TabBarIcon({
@@ -104,6 +104,15 @@ export default function TabLayout() {
           title: 'Meals',
           tabBarIcon: ({ color, focused }) => (
             <TabBarIcon icon={Utensils} color={color} focused={focused} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="store"
+        options={{
+          title: 'Store',
+          tabBarIcon: ({ color, focused }) => (
+            <TabBarIcon icon={ShoppingBag} color={color} focused={focused} />
           ),
         }}
       />

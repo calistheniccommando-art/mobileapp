@@ -1,10 +1,10 @@
 /**
  * ADMIN - MEAL MANAGEMENT
- * Manage meals, meal plans, and meal prep videos
+ * Full CRUD for Nigerian meals with nutrition tracking
  */
 
-import React, { useState, useMemo } from 'react';
-import { View, Text, ScrollView, Pressable, TextInput } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, Text, ScrollView, Pressable, TextInput, Modal, ActivityIndicator } from 'react-native';
 import { Image } from 'expo-image';
 import {
   Search,
@@ -17,493 +17,656 @@ import {
   Eye,
   Edit,
   Trash2,
-  Video,
-  Upload,
+  Copy,
+  RotateCcw,
+  MoreVertical,
+  Star,
+  Check,
+  X,
   Coffee,
   Sun,
   Moon,
   Cookie,
-  Check,
-  X,
+  ChevronLeft,
+  ChevronRight,
 } from 'lucide-react-native';
 import { cn } from '@/lib/cn';
-import { meals, mealPlans } from '@/data/mock-data';
-import type { MealType, MealIntensity } from '@/types/fitness';
-import type { ContentStatus } from '@/types/database';
+import { MealForm } from '@/components/admin/MealForm';
+import { NutritionMini } from '@/components/admin/NutritionCalculator';
+import {
+  mealService,
+  type Meal,
+  type MealInsert,
+  type MealUpdate,
+  type MealType,
+  type CalorieCategory,
+  type MealRegion,
+  type DietaryTag,
+  MEAL_TYPE_LABELS,
+  CALORIE_CATEGORY_LABELS,
+  MEAL_REGION_LABELS,
+  DIETARY_TAG_LABELS,
+  MEAL_TYPE_COLORS,
+  CALORIE_CATEGORY_COLORS,
+} from '@/lib/supabase/meals';
 
-// Tab type
-type TabType = 'meals' | 'meal-plans';
+// ==================== CONFIGS ====================
 
-// Meal type icons
-const MEAL_TYPE_CONFIG: Record<MealType, { icon: typeof Coffee; color: string; label: string }> = {
-  breakfast: { icon: Coffee, color: '#f59e0b', label: 'Breakfast' },
-  lunch: { icon: Sun, color: '#06b6d4', label: 'Lunch' },
-  dinner: { icon: Moon, color: '#8b5cf6', label: 'Dinner' },
-  snack: { icon: Cookie, color: '#ec4899', label: 'Snack' },
+const MEAL_TYPE_ICONS: Record<MealType, typeof Coffee> = {
+  breakfast: Coffee,
+  lunch: Sun,
+  dinner: Moon,
+  snack: Cookie,
 };
 
-// Intensity config
-const INTENSITY_CONFIG: Record<MealIntensity, { bg: string; text: string; label: string }> = {
-  light: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', label: 'Light' },
-  standard: { bg: 'bg-amber-500/20', text: 'text-amber-400', label: 'Standard' },
-  high_energy: { bg: 'bg-rose-500/20', text: 'text-rose-400', label: 'High Energy' },
-};
+// ==================== COMPONENTS ====================
 
-// Status badge
-function StatusBadge({ status }: { status: ContentStatus }) {
-  const config: Record<ContentStatus, { bg: string; text: string; label: string }> = {
-    draft: { bg: 'bg-slate-500/20', text: 'text-slate-400', label: 'Draft' },
-    pending_review: { bg: 'bg-amber-500/20', text: 'text-amber-400', label: 'Pending' },
-    approved: { bg: 'bg-emerald-500/20', text: 'text-emerald-400', label: 'Approved' },
-    rejected: { bg: 'bg-rose-500/20', text: 'text-rose-400', label: 'Rejected' },
-    archived: { bg: 'bg-slate-500/20', text: 'text-slate-400', label: 'Archived' },
-  };
-  const { bg, text, label } = config[status];
-
+function MealTypeBadge({ type }: { type: MealType }) {
+  const { bg, text } = MEAL_TYPE_COLORS[type];
+  const Icon = MEAL_TYPE_ICONS[type];
+  
   return (
-    <View className={cn('rounded-full px-2 py-1', bg)}>
-      <Text className={cn('text-xs font-medium', text)}>{label}</Text>
+    <View className={cn('flex-row items-center rounded-full px-2 py-1', bg)}>
+      <Icon size={12} color={text.replace('text-', '#').replace('-800', '')} />
+      <Text className={cn('text-xs font-medium ml-1', text)}>
+        {MEAL_TYPE_LABELS[type]}
+      </Text>
     </View>
   );
 }
 
-// Intensity badge
-function IntensityBadge({ intensity }: { intensity: MealIntensity }) {
-  const { bg, text, label } = INTENSITY_CONFIG[intensity];
-
+function CalorieCategoryBadge({ category }: { category: CalorieCategory }) {
+  const { bg, text } = CALORIE_CATEGORY_COLORS[category];
+  
   return (
     <View className={cn('rounded-full px-2 py-1', bg)}>
-      <Text className={cn('text-xs font-medium', text)}>{label}</Text>
+      <Text className={cn('text-xs font-medium', text)}>
+        {CALORIE_CATEGORY_LABELS[category]}
+      </Text>
     </View>
   );
 }
 
-// Tab button
-function TabButton({
-  label,
-  count,
+function StatusBadge({ isActive, isFeatured }: { isActive: boolean; isFeatured?: boolean }) {
+  if (!isActive) {
+    return (
+      <View className="rounded-full px-2 py-1 bg-gray-200">
+        <Text className="text-xs font-medium text-gray-600">Inactive</Text>
+      </View>
+    );
+  }
+  if (isFeatured) {
+    return (
+      <View className="flex-row items-center rounded-full px-2 py-1 bg-yellow-100">
+        <Star size={10} color="#ca8a04" fill="#ca8a04" />
+        <Text className="text-xs font-medium text-yellow-700 ml-1">Featured</Text>
+      </View>
+    );
+  }
+  return (
+    <View className="rounded-full px-2 py-1 bg-green-100">
+      <Text className="text-xs font-medium text-green-700">Active</Text>
+    </View>
+  );
+}
+
+function Toast({ message, type, onClose }: { message: string; type: 'success' | 'error'; onClose: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 3000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <Pressable
+      onPress={onClose}
+      className={cn(
+        'absolute top-4 right-4 left-4 z-50 rounded-lg p-4 flex-row items-center',
+        type === 'success' ? 'bg-green-600' : 'bg-red-600'
+      )}
+    >
+      {type === 'success' ? (
+        <Check size={20} color="white" />
+      ) : (
+        <X size={20} color="white" />
+      )}
+      <Text className="text-white font-medium ml-2 flex-1">{message}</Text>
+    </Pressable>
+  );
+}
+
+function ActionMenu({
+  onEdit,
+  onDuplicate,
+  onToggleFeatured,
+  onDelete,
+  onRestore,
   isActive,
-  onPress,
+  isFeatured,
+  onClose,
 }: {
-  label: string;
-  count: number;
+  onEdit: () => void;
+  onDuplicate: () => void;
+  onToggleFeatured: () => void;
+  onDelete: () => void;
+  onRestore?: () => void;
   isActive: boolean;
-  onPress: () => void;
+  isFeatured: boolean;
+  onClose: () => void;
 }) {
   return (
-    <Pressable onPress={onPress}>
-      <View
-        className={cn(
-          'flex-row items-center rounded-lg px-4 py-2',
-          isActive ? 'bg-emerald-500/10' : 'bg-transparent'
-        )}
-      >
-        <Text
-          className={cn(
-            'text-sm font-medium',
-            isActive ? 'text-emerald-400' : 'text-slate-400'
-          )}
+    <Pressable
+      onPress={onClose}
+      className="absolute inset-0 z-40"
+    >
+      <View className="absolute right-0 top-8 bg-white rounded-lg shadow-lg border border-gray-200 py-1 min-w-[160px] z-50">
+        <Pressable
+          onPress={() => { onEdit(); onClose(); }}
+          className="flex-row items-center px-4 py-2"
         >
-          {label}
-        </Text>
-        <View
-          className={cn(
-            'ml-2 rounded-full px-2 py-0.5',
-            isActive ? 'bg-emerald-500/20' : 'bg-slate-800'
-          )}
+          <Edit size={16} color="#6B7280" />
+          <Text className="text-gray-700 ml-3">Edit</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => { onDuplicate(); onClose(); }}
+          className="flex-row items-center px-4 py-2"
         >
-          <Text
-            className={cn(
-              'text-xs',
-              isActive ? 'text-emerald-400' : 'text-slate-500'
-            )}
+          <Copy size={16} color="#6B7280" />
+          <Text className="text-gray-700 ml-3">Duplicate</Text>
+        </Pressable>
+        <Pressable
+          onPress={() => { onToggleFeatured(); onClose(); }}
+          className="flex-row items-center px-4 py-2"
+        >
+          <Star size={16} color={isFeatured ? '#ca8a04' : '#6B7280'} fill={isFeatured ? '#ca8a04' : 'transparent'} />
+          <Text className="text-gray-700 ml-3">{isFeatured ? 'Unfeature' : 'Feature'}</Text>
+        </Pressable>
+        <View className="h-px bg-gray-200 my-1" />
+        {isActive ? (
+          <Pressable
+            onPress={() => { onDelete(); onClose(); }}
+            className="flex-row items-center px-4 py-2"
           >
-            {count}
-          </Text>
-        </View>
+            <Trash2 size={16} color="#EF4444" />
+            <Text className="text-red-500 ml-3">Delete</Text>
+          </Pressable>
+        ) : (
+          <Pressable
+            onPress={() => { onRestore?.(); onClose(); }}
+            className="flex-row items-center px-4 py-2"
+          >
+            <RotateCcw size={16} color="#10B981" />
+            <Text className="text-green-600 ml-3">Restore</Text>
+          </Pressable>
+        )}
       </View>
     </Pressable>
   );
 }
 
-// Meal card
-function MealCard({
-  meal,
-  onEdit,
-}: {
-  meal: typeof meals[0];
-  onEdit: () => void;
-}) {
-  const typeConfig = MEAL_TYPE_CONFIG[meal.type];
-  const TypeIcon = typeConfig.icon;
-  const hasVideo = !!meal.videoUrl;
+// ==================== MAIN SCREEN ====================
 
-  return (
-    <View className="rounded-xl border border-slate-700 bg-slate-900 p-4">
-      {/* Image */}
-      <View className="relative mb-3 h-32 overflow-hidden rounded-lg">
-        <Image
-          source={{ uri: meal.imageUrl }}
-          style={{ width: '100%', height: '100%' }}
-          contentFit="cover"
-        />
-        <View className="absolute left-2 top-2 flex-row gap-1">
-          <View
-            className="flex-row items-center rounded-full px-2 py-0.5"
-            style={{ backgroundColor: `${typeConfig.color}30` }}
-          >
-            <TypeIcon size={12} color={typeConfig.color} />
-            <Text className="ml-1 text-xs" style={{ color: typeConfig.color }}>
-              {typeConfig.label}
-            </Text>
-          </View>
-        </View>
-        <View className="absolute right-2 top-2">
-          <StatusBadge status="approved" />
-        </View>
-        {hasVideo && (
-          <View className="absolute bottom-2 right-2 flex-row items-center rounded-full bg-black/60 px-2 py-0.5">
-            <Video size={10} color="white" />
-            <Text className="ml-1 text-xs text-white">Prep video</Text>
-          </View>
-        )}
-      </View>
+export default function AdminMealsScreen() {
+  // Data state
+  const [meals, setMeals] = useState<Meal[]>([]);
+  const [total, setTotal] = useState(0);
+  const [isLoading, setIsLoading] = useState(true);
+  const [stats, setStats] = useState<{
+    total: number;
+    active: number;
+    inactive: number;
+    featured: number;
+    averageCalories: number;
+  } | null>(null);
 
-      {/* Info */}
-      <Text className="mb-1 text-base font-semibold text-white">{meal.name}</Text>
-      <Text className="mb-3 text-xs text-slate-400" numberOfLines={2}>
-        {meal.description}
-      </Text>
+  // UI state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedMealType, setSelectedMealType] = useState<MealType | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<CalorieCategory | null>(null);
+  const [selectedRegion, setSelectedRegion] = useState<MealRegion | null>(null);
+  const [showInactive, setShowInactive] = useState(false);
+  const [page, setPage] = useState(1);
+  const [pageSize] = useState(10);
 
-      {/* Nutrition stats */}
-      <View className="mb-3 flex-row gap-3">
-        <View className="flex-row items-center">
-          <Flame size={12} color="#f97316" />
-          <Text className="ml-1 text-xs text-orange-400">{meal.nutrition.calories} cal</Text>
-        </View>
-        <View className="flex-row items-center">
-          <Text className="text-xs text-cyan-400">{meal.nutrition.protein}g protein</Text>
-        </View>
-      </View>
+  // Modal state
+  const [showForm, setShowForm] = useState(false);
+  const [editingMeal, setEditingMeal] = useState<Meal | null>(null);
+  const [formLoading, setFormLoading] = useState(false);
+  const [actionMenuMealId, setActionMenuMealId] = useState<string | null>(null);
 
-      {/* Dietary tags */}
-      {meal.dietaryTags.length > 0 && (
-        <View className="mb-3 flex-row flex-wrap gap-1">
-          {meal.dietaryTags.slice(0, 3).map((tag) => (
-            <View key={tag} className="rounded bg-slate-800 px-2 py-0.5">
-              <Text className="text-xs capitalize text-slate-400">{tag.replace('_', ' ')}</Text>
-            </View>
-          ))}
-        </View>
-      )}
+  // Toast state
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-      {/* Actions */}
-      <View className="flex-row gap-2">
-        <Pressable
-          onPress={onEdit}
-          className="flex-1 flex-row items-center justify-center rounded-lg bg-slate-800 py-2"
-        >
-          <Edit size={14} color="#94a3b8" />
-          <Text className="ml-2 text-xs text-slate-400">Edit</Text>
-        </Pressable>
-        <Pressable className="items-center justify-center rounded-lg bg-slate-800 px-3 py-2">
-          <Eye size={14} color="#94a3b8" />
-        </Pressable>
-      </View>
-    </View>
-  );
-}
+  // Fetch meals
+  const fetchMeals = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const result = await mealService.list({
+        filters: {
+          search: searchQuery || undefined,
+          mealType: selectedMealType || undefined,
+          calorieCategory: selectedCategory || undefined,
+          region: selectedRegion || undefined,
+          isActive: showInactive ? undefined : true,
+        },
+        page,
+        pageSize,
+        orderBy: 'name',
+        orderDirection: 'asc',
+      });
+      setMeals(result.meals);
+      setTotal(result.total);
+    } catch (error) {
+      setToast({ message: 'Failed to load meals', type: 'error' });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [searchQuery, selectedMealType, selectedCategory, selectedRegion, showInactive, page, pageSize]);
 
-// Meal plan row
-function MealPlanRow({
-  mealPlan,
-  onEdit,
-}: {
-  mealPlan: typeof mealPlans[0];
-  onEdit: () => void;
-}) {
-  // Derive intensity from total calories
-  const getIntensity = (calories: number): MealIntensity => {
-    if (calories < 1600) return 'light';
-    if (calories < 2000) return 'standard';
-    return 'high_energy';
+  // Fetch stats
+  const fetchStats = useCallback(async () => {
+    try {
+      const data = await mealService.getStats();
+      setStats(data);
+    } catch (error) {
+      console.error('Failed to load stats:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchMeals();
+  }, [fetchMeals]);
+
+  useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
+
+  // Reset page on filter change
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, selectedMealType, selectedCategory, selectedRegion, showInactive]);
+
+  // Handlers
+  const handleCreate = () => {
+    setEditingMeal(null);
+    setShowForm(true);
   };
 
-  const intensity = getIntensity(mealPlan.totalNutrition.calories);
-  const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const handleEdit = (meal: Meal) => {
+    setEditingMeal(meal);
+    setShowForm(true);
+  };
+
+  const handleSubmit = async (data: MealInsert | MealUpdate) => {
+    try {
+      setFormLoading(true);
+      if (editingMeal) {
+        await mealService.update(editingMeal.id, data);
+        setToast({ message: 'Meal updated successfully', type: 'success' });
+      } else {
+        await mealService.create(data as MealInsert);
+        setToast({ message: 'Meal created successfully', type: 'success' });
+      }
+      setShowForm(false);
+      setEditingMeal(null);
+      fetchMeals();
+      fetchStats();
+    } catch (error) {
+      setToast({ message: 'Failed to save meal', type: 'error' });
+    } finally {
+      setFormLoading(false);
+    }
+  };
+
+  const handleDuplicate = async (id: string) => {
+    try {
+      await mealService.duplicate(id);
+      setToast({ message: 'Meal duplicated successfully', type: 'success' });
+      fetchMeals();
+      fetchStats();
+    } catch (error) {
+      setToast({ message: 'Failed to duplicate meal', type: 'error' });
+    }
+  };
+
+  const handleToggleFeatured = async (id: string) => {
+    try {
+      await mealService.toggleFeatured(id);
+      setToast({ message: 'Featured status updated', type: 'success' });
+      fetchMeals();
+      fetchStats();
+    } catch (error) {
+      setToast({ message: 'Failed to update featured status', type: 'error' });
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    try {
+      await mealService.softDelete(id);
+      setToast({ message: 'Meal deleted successfully', type: 'success' });
+      fetchMeals();
+      fetchStats();
+    } catch (error) {
+      setToast({ message: 'Failed to delete meal', type: 'error' });
+    }
+  };
+
+  const handleRestore = async (id: string) => {
+    try {
+      await mealService.restore(id);
+      setToast({ message: 'Meal restored successfully', type: 'success' });
+      fetchMeals();
+      fetchStats();
+    } catch (error) {
+      setToast({ message: 'Failed to restore meal', type: 'error' });
+    }
+  };
+
+  const totalPages = Math.ceil(total / pageSize);
 
   return (
-    <View className="flex-row items-center border-b border-slate-800 py-4">
-      {/* Day */}
-      <View className="w-16">
-        <View className="h-10 w-10 items-center justify-center rounded-lg bg-cyan-500/20">
-          <Text className="text-sm font-bold text-cyan-400">{dayNames[mealPlan.dayOfWeek]}</Text>
-        </View>
-      </View>
-
-      {/* Name */}
-      <View className="flex-1">
-        <Text className="text-sm font-medium text-white">{dayNames[mealPlan.dayOfWeek]} Meal Plan</Text>
-        <Text className="text-xs text-slate-400">{mealPlan.meals.length} meals</Text>
-      </View>
-
-      {/* Intensity */}
-      <View className="w-28">
-        <IntensityBadge intensity={intensity} />
-      </View>
-
-      {/* Total Nutrition */}
-      <View className="w-32">
-        <View className="flex-row items-center">
-          <Flame size={12} color="#f97316" />
-          <Text className="ml-1 text-sm text-white">{mealPlan.totalNutrition.calories} cal</Text>
-        </View>
-        <Text className="text-xs text-slate-400">{mealPlan.totalNutrition.protein}g protein</Text>
-      </View>
-
-      {/* Meals breakdown */}
-      <View className="w-48 flex-row gap-1">
-        {(['breakfast', 'lunch', 'dinner', 'snack'] as MealType[]).map((type) => {
-          const mealOfType = mealPlan.meals.find((m) => m.type === type);
-          const config = MEAL_TYPE_CONFIG[type];
-          const Icon = config.icon;
-
-          return (
-            <View
-              key={type}
-              className={cn(
-                'h-7 w-7 items-center justify-center rounded',
-                mealOfType ? 'bg-slate-700' : 'bg-slate-800/50'
-              )}
-            >
-              <Icon size={14} color={mealOfType ? config.color : '#334155'} />
-            </View>
-          );
-        })}
-      </View>
-
-      {/* Status */}
-      <View className="w-24">
-        <StatusBadge status="approved" />
-      </View>
-
-      {/* Actions */}
-      <View className="w-20 flex-row justify-end gap-2">
-        <Pressable onPress={onEdit} className="p-1">
-          <Edit size={16} color="#64748b" />
-        </Pressable>
-        <Pressable className="p-1">
-          <Eye size={16} color="#64748b" />
-        </Pressable>
-      </View>
-    </View>
-  );
-}
-
-// Filter dropdown
-function FilterDropdown({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: { value: string; label: string }[];
-  onChange: (value: string) => void;
-}) {
-  const [isOpen, setIsOpen] = useState(false);
-
-  return (
-    <View className="relative">
-      <Pressable
-        onPress={() => setIsOpen(!isOpen)}
-        className="flex-row items-center rounded-lg border border-slate-700 bg-slate-800 px-3 py-2"
-      >
-        <Text className="mr-2 text-xs text-slate-400">{label}:</Text>
-        <Text className="text-sm text-white">{options.find((o) => o.value === value)?.label ?? 'All'}</Text>
-        <ChevronDown size={14} color="#64748b" style={{ marginLeft: 4 }} />
-      </Pressable>
-
-      {isOpen && (
-        <View className="absolute left-0 top-full z-10 mt-1 min-w-full rounded-lg border border-slate-700 bg-slate-800 py-1 shadow-lg">
-          {options.map((option) => (
-            <Pressable
-              key={option.value}
-              onPress={() => {
-                onChange(option.value);
-                setIsOpen(false);
-              }}
-              className={cn(
-                'px-3 py-2',
-                value === option.value && 'bg-emerald-500/10'
-              )}
-            >
-              <Text
-                className={cn(
-                  'text-sm',
-                  value === option.value ? 'text-emerald-400' : 'text-white'
-                )}
-              >
-                {option.label}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+    <View className="flex-1 bg-gray-50">
+      {/* Toast */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
       )}
-    </View>
-  );
-}
 
-export default function AdminMealsPage() {
-  const [activeTab, setActiveTab] = useState<TabType>('meals');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [mealTypeFilter, setMealTypeFilter] = useState<string>('all');
-  const [intensityFilter, setIntensityFilter] = useState<string>('all');
-
-  // Filter meals
-  const filteredMeals = useMemo(() => {
-    return meals.filter((meal) => {
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        if (!meal.name.toLowerCase().includes(query)) return false;
-      }
-      if (mealTypeFilter !== 'all' && meal.type !== mealTypeFilter) return false;
-      return true;
-    });
-  }, [searchQuery, mealTypeFilter]);
-
-  // Filter meal plans
-  const filteredMealPlans = useMemo(() => {
-    return mealPlans.filter((plan) => {
-      if (intensityFilter !== 'all') {
-        // Derive intensity from calories
-        const calories = plan.totalNutrition.calories;
-        let intensity: MealIntensity;
-        if (calories < 1600) intensity = 'light';
-        else if (calories < 2000) intensity = 'standard';
-        else intensity = 'high_energy';
-        if (intensity !== intensityFilter) return false;
-      }
-      return true;
-    });
-  }, [intensityFilter]);
-
-  return (
-    <View className="flex-1 p-6">
-      {/* Page header */}
-      <View className="mb-6 flex-row items-center justify-between">
-        <View>
-          <Text className="text-2xl font-bold text-white">Meal Management</Text>
-          <Text className="text-sm text-slate-400">
-            Manage meals, meal plans, and nutritional content
-          </Text>
-        </View>
-
-        <View className="flex-row gap-2">
-          <Pressable className="flex-row items-center rounded-lg bg-slate-800 px-4 py-2">
-            <Upload size={16} color="#94a3b8" />
-            <Text className="ml-2 text-sm text-slate-400">Upload Prep Video</Text>
-          </Pressable>
-          <Pressable className="flex-row items-center rounded-lg bg-emerald-500 px-4 py-2">
-            <Plus size={16} color="white" />
-            <Text className="ml-2 text-sm font-medium text-white">Add Meal</Text>
-          </Pressable>
-        </View>
-      </View>
-
-      {/* Tabs */}
-      <View className="mb-4 flex-row gap-2 border-b border-slate-800 pb-4">
-        <TabButton
-          label="Meals"
-          count={meals.length}
-          isActive={activeTab === 'meals'}
-          onPress={() => setActiveTab('meals')}
-        />
-        <TabButton
-          label="Meal Plans"
-          count={mealPlans.length}
-          isActive={activeTab === 'meal-plans'}
-          onPress={() => setActiveTab('meal-plans')}
-        />
-      </View>
-
-      {/* Search and filters */}
-      <View className="mb-4 flex-row items-center gap-4">
-        <View className="flex-1 flex-row items-center rounded-lg bg-slate-800 px-4 py-2">
-          <Search size={18} color="#64748b" />
-          <TextInput
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholder={`Search ${activeTab === 'meals' ? 'meals' : 'meal plans'}...`}
-            placeholderTextColor="#64748b"
-            className="ml-3 flex-1 text-sm text-white"
-          />
-        </View>
-
-        {activeTab === 'meals' && (
-          <FilterDropdown
-            label="Type"
-            value={mealTypeFilter}
-            options={[
-              { value: 'all', label: 'All' },
-              { value: 'breakfast', label: 'Breakfast' },
-              { value: 'lunch', label: 'Lunch' },
-              { value: 'dinner', label: 'Dinner' },
-              { value: 'snack', label: 'Snack' },
-            ]}
-            onChange={setMealTypeFilter}
-          />
-        )}
-
-        {activeTab === 'meal-plans' && (
-          <FilterDropdown
-            label="Intensity"
-            value={intensityFilter}
-            options={[
-              { value: 'all', label: 'All' },
-              { value: 'light', label: 'Light' },
-              { value: 'standard', label: 'Standard' },
-              { value: 'high_energy', label: 'High Energy' },
-            ]}
-            onChange={setIntensityFilter}
-          />
-        )}
-      </View>
-
-      {/* Content */}
       <ScrollView className="flex-1">
-        {/* Meals tab */}
-        {activeTab === 'meals' && (
-          <View className="flex-row flex-wrap gap-4">
-            {filteredMeals.map((meal) => (
-              <View key={meal.id} style={{ width: '23%' }}>
-                <MealCard meal={meal} onEdit={() => {}} />
-              </View>
-            ))}
+        <View className="p-6">
+          {/* Header */}
+          <View className="flex-row items-center justify-between mb-6">
+            <View>
+              <Text className="text-2xl font-bold text-gray-900">Nigerian Meal Database</Text>
+              <Text className="text-gray-500">Manage meals, nutrition, and meal prep content</Text>
+            </View>
+            <Pressable
+              onPress={handleCreate}
+              className="flex-row items-center bg-green-600 px-4 py-2 rounded-lg"
+            >
+              <Plus size={20} color="white" />
+              <Text className="text-white font-semibold ml-2">Add Meal</Text>
+            </Pressable>
           </View>
-        )}
 
-        {/* Meal Plans tab */}
-        {activeTab === 'meal-plans' && (
-          <View className="rounded-2xl border border-slate-700 bg-slate-900">
-            {/* Table header */}
-            <View className="flex-row items-center border-b border-slate-700 px-4 py-3">
-              <Text className="w-16 text-xs font-medium uppercase text-slate-500">Day</Text>
-              <Text className="flex-1 text-xs font-medium uppercase text-slate-500">Plan</Text>
-              <Text className="w-28 text-xs font-medium uppercase text-slate-500">Intensity</Text>
-              <Text className="w-32 text-xs font-medium uppercase text-slate-500">Nutrition</Text>
-              <Text className="w-48 text-xs font-medium uppercase text-slate-500">Meals</Text>
-              <Text className="w-24 text-xs font-medium uppercase text-slate-500">Status</Text>
-              <View className="w-20" />
+          {/* Stats Cards */}
+          {stats && (
+            <View className="flex-row gap-4 mb-6">
+              <View className="flex-1 bg-white rounded-xl p-4 border border-gray-200">
+                <Text className="text-2xl font-bold text-gray-900">{stats.total}</Text>
+                <Text className="text-sm text-gray-500">Total Meals</Text>
+              </View>
+              <View className="flex-1 bg-white rounded-xl p-4 border border-gray-200">
+                <Text className="text-2xl font-bold text-green-600">{stats.active}</Text>
+                <Text className="text-sm text-gray-500">Active</Text>
+              </View>
+              <View className="flex-1 bg-white rounded-xl p-4 border border-gray-200">
+                <Text className="text-2xl font-bold text-yellow-600">{stats.featured}</Text>
+                <Text className="text-sm text-gray-500">Featured</Text>
+              </View>
+              <View className="flex-1 bg-white rounded-xl p-4 border border-gray-200">
+                <Text className="text-2xl font-bold text-blue-600">{stats.averageCalories}</Text>
+                <Text className="text-sm text-gray-500">Avg Calories</Text>
+              </View>
+            </View>
+          )}
+
+          {/* Filters */}
+          <View className="bg-white rounded-xl p-4 mb-6 border border-gray-200">
+            <View className="flex-row items-center gap-4 mb-4">
+              {/* Search */}
+              <View className="flex-1 flex-row items-center bg-gray-100 rounded-lg px-3 py-2">
+                <Search size={20} color="#9CA3AF" />
+                <TextInput
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Search meals..."
+                  className="flex-1 ml-2 text-base"
+                />
+              </View>
             </View>
 
-            {filteredMealPlans.map((plan) => (
-              <MealPlanRow key={plan.id} mealPlan={plan} onEdit={() => {}} />
-            ))}
+            {/* Filter Pills */}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+              <View className="flex-row gap-2">
+                {/* Meal Type Filter */}
+                {(['breakfast', 'lunch', 'dinner', 'snack'] as MealType[]).map((type) => (
+                  <Pressable
+                    key={type}
+                    onPress={() => setSelectedMealType(selectedMealType === type ? null : type)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-full border',
+                      selectedMealType === type
+                        ? 'bg-blue-600 border-blue-600'
+                        : 'bg-white border-gray-300'
+                    )}
+                  >
+                    <Text
+                      className={cn(
+                        'text-sm',
+                        selectedMealType === type ? 'text-white' : 'text-gray-700'
+                      )}
+                    >
+                      {MEAL_TYPE_LABELS[type]}
+                    </Text>
+                  </Pressable>
+                ))}
+                
+                <View className="w-px bg-gray-300 mx-2" />
+                
+                {/* Calorie Category Filter */}
+                {(['light', 'standard', 'high_energy'] as CalorieCategory[]).map((cat) => (
+                  <Pressable
+                    key={cat}
+                    onPress={() => setSelectedCategory(selectedCategory === cat ? null : cat)}
+                    className={cn(
+                      'px-3 py-1.5 rounded-full border',
+                      selectedCategory === cat
+                        ? 'bg-green-600 border-green-600'
+                        : 'bg-white border-gray-300'
+                    )}
+                  >
+                    <Text
+                      className={cn(
+                        'text-sm',
+                        selectedCategory === cat ? 'text-white' : 'text-gray-700'
+                      )}
+                    >
+                      {cat === 'light' ? 'Light' : cat === 'standard' ? 'Standard' : 'High Energy'}
+                    </Text>
+                  </Pressable>
+                ))}
+
+                <View className="w-px bg-gray-300 mx-2" />
+
+                {/* Show Inactive Toggle */}
+                <Pressable
+                  onPress={() => setShowInactive(!showInactive)}
+                  className={cn(
+                    'px-3 py-1.5 rounded-full border',
+                    showInactive
+                      ? 'bg-gray-600 border-gray-600'
+                      : 'bg-white border-gray-300'
+                  )}
+                >
+                  <Text
+                    className={cn(
+                      'text-sm',
+                      showInactive ? 'text-white' : 'text-gray-700'
+                    )}
+                  >
+                    Show Inactive
+                  </Text>
+                </Pressable>
+              </View>
+            </ScrollView>
           </View>
-        )}
+
+          {/* Meals Table */}
+          <View className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            {/* Table Header */}
+            <View className="flex-row items-center bg-gray-50 px-4 py-3 border-b border-gray-200">
+              <Text className="flex-[2] text-sm font-semibold text-gray-600">Meal</Text>
+              <Text className="flex-1 text-sm font-semibold text-gray-600">Type</Text>
+              <Text className="flex-1 text-sm font-semibold text-gray-600">Category</Text>
+              <Text className="flex-1 text-sm font-semibold text-gray-600">Nutrition</Text>
+              <Text className="flex-1 text-sm font-semibold text-gray-600">Status</Text>
+              <Text className="w-12 text-sm font-semibold text-gray-600"></Text>
+            </View>
+
+            {/* Table Body */}
+            {isLoading ? (
+              <View className="py-12 items-center">
+                <ActivityIndicator size="large" color="#10B981" />
+                <Text className="text-gray-500 mt-4">Loading meals...</Text>
+              </View>
+            ) : meals.length === 0 ? (
+              <View className="py-12 items-center">
+                <Utensils size={48} color="#9CA3AF" />
+                <Text className="text-gray-500 mt-4">No meals found</Text>
+                <Pressable
+                  onPress={handleCreate}
+                  className="mt-4 bg-green-600 px-4 py-2 rounded-lg"
+                >
+                  <Text className="text-white font-semibold">Add First Meal</Text>
+                </Pressable>
+              </View>
+            ) : (
+              meals.map((meal) => (
+                <View
+                  key={meal.id}
+                  className="flex-row items-center px-4 py-3 border-b border-gray-100"
+                >
+                  {/* Meal Info */}
+                  <View className="flex-[2] flex-row items-center">
+                    {meal.image_url ? (
+                      <Image
+                        source={{ uri: meal.image_url }}
+                        className="w-12 h-12 rounded-lg"
+                        contentFit="cover"
+                      />
+                    ) : (
+                      <View className="w-12 h-12 rounded-lg bg-gray-200 items-center justify-center">
+                        <Utensils size={20} color="#9CA3AF" />
+                      </View>
+                    )}
+                    <View className="ml-3 flex-1">
+                      <Text className="font-semibold text-gray-900" numberOfLines={1}>
+                        {meal.name}
+                      </Text>
+                      <Text className="text-sm text-gray-500" numberOfLines={1}>
+                        {meal.region ? MEAL_REGION_LABELS[meal.region] : 'Nigerian'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Type */}
+                  <View className="flex-1">
+                    <MealTypeBadge type={meal.meal_type} />
+                  </View>
+
+                  {/* Category */}
+                  <View className="flex-1">
+                    <CalorieCategoryBadge category={meal.calorie_category} />
+                  </View>
+
+                  {/* Nutrition */}
+                  <View className="flex-1">
+                    <NutritionMini
+                      nutrition={{
+                        calories: meal.calories,
+                        protein: meal.protein_grams,
+                        carbs: meal.carbs_grams,
+                        fat: meal.fat_grams,
+                      }}
+                    />
+                  </View>
+
+                  {/* Status */}
+                  <View className="flex-1">
+                    <StatusBadge isActive={meal.is_active} isFeatured={meal.is_featured} />
+                  </View>
+
+                  {/* Actions */}
+                  <View className="w-12 relative">
+                    <Pressable
+                      onPress={() => setActionMenuMealId(actionMenuMealId === meal.id ? null : meal.id)}
+                      className="p-2"
+                    >
+                      <MoreVertical size={20} color="#6B7280" />
+                    </Pressable>
+                    {actionMenuMealId === meal.id && (
+                      <ActionMenu
+                        onEdit={() => handleEdit(meal)}
+                        onDuplicate={() => handleDuplicate(meal.id)}
+                        onToggleFeatured={() => handleToggleFeatured(meal.id)}
+                        onDelete={() => handleDelete(meal.id)}
+                        onRestore={() => handleRestore(meal.id)}
+                        isActive={meal.is_active}
+                        isFeatured={meal.is_featured}
+                        onClose={() => setActionMenuMealId(null)}
+                      />
+                    )}
+                  </View>
+                </View>
+              ))
+            )}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <View className="flex-row items-center justify-between px-4 py-3 bg-gray-50 border-t border-gray-200">
+                <Text className="text-sm text-gray-500">
+                  Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, total)} of {total}
+                </Text>
+                <View className="flex-row items-center gap-2">
+                  <Pressable
+                    onPress={() => setPage(Math.max(1, page - 1))}
+                    disabled={page === 1}
+                    className={cn(
+                      'p-2 rounded-lg',
+                      page === 1 ? 'opacity-50' : 'bg-white border border-gray-300'
+                    )}
+                  >
+                    <ChevronLeft size={20} color="#6B7280" />
+                  </Pressable>
+                  <Text className="text-sm text-gray-600 mx-2">
+                    Page {page} of {totalPages}
+                  </Text>
+                  <Pressable
+                    onPress={() => setPage(Math.min(totalPages, page + 1))}
+                    disabled={page === totalPages}
+                    className={cn(
+                      'p-2 rounded-lg',
+                      page === totalPages ? 'opacity-50' : 'bg-white border border-gray-300'
+                    )}
+                  >
+                    <ChevronRight size={20} color="#6B7280" />
+                  </Pressable>
+                </View>
+              </View>
+            )}
+          </View>
+        </View>
       </ScrollView>
+
+      {/* Create/Edit Modal */}
+      <Modal
+        visible={showForm}
+        animationType="slide"
+        presentationStyle="pageSheet"
+      >
+        <MealForm
+          meal={editingMeal}
+          onSubmit={handleSubmit}
+          onCancel={() => {
+            setShowForm(false);
+            setEditingMeal(null);
+          }}
+          isLoading={formLoading}
+        />
+      </Modal>
     </View>
   );
 }

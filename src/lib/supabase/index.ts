@@ -59,5 +59,50 @@ export type {
   WorkoutListResult,
 } from './workouts';
 
+// Meal CRUD service (admin)
+export { mealService as mealCrudService } from './meals';
+export {
+  MEAL_TYPE_LABELS,
+  CALORIE_CATEGORY_LABELS,
+  MEAL_REGION_LABELS,
+  DIETARY_TAG_LABELS,
+  GOAL_LABELS,
+  MEAL_TYPE_COLORS,
+  CALORIE_CATEGORY_COLORS,
+} from './meals';
+export type {
+  Meal,
+  MealInsert,
+  MealUpdate,
+  MealType,
+  CalorieCategory,
+  MealRegion,
+  DietaryTag,
+  MealFilters,
+  MealListOptions,
+  MealListResult,
+} from './meals';
+
+// Fasting CRUD service (admin)
+export { fastingService } from './fasting';
+export {
+  FASTING_PROTOCOL_LABELS,
+  FASTING_PROTOCOL_DESCRIPTIONS,
+  FASTING_DIFFICULTY_LABELS,
+  FASTING_PROTOCOL_COLORS,
+  FASTING_DIFFICULTY_COLORS,
+  DEFAULT_FASTING_PLANS,
+} from './fasting';
+export type {
+  FastingPlan,
+  FastingPlanInsert,
+  FastingPlanUpdate,
+  FastingProtocol,
+  FastingDifficulty,
+  FastingFilters,
+  FastingListOptions,
+  FastingListResult,
+} from './fasting';
+
 // Types
 export * from './types';

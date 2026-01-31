@@ -129,5 +129,37 @@ export type {
   ImageMetadata,
 } from './storage';
 
+// Sync service
+export { syncService } from './sync';
+export {
+  getSyncQueue,
+  addToSyncQueue,
+  removeFromSyncQueue,
+  clearSyncQueue,
+  processAllSyncQueue,
+  isOnline,
+  subscribeToNetworkStatus,
+  syncWorkoutProgress,
+  syncMealCompletion,
+  syncFastingSession,
+  syncDailyProgress,
+  fetchWorkoutProgress,
+  fetchMealCompletions,
+  fetchFastingSessions,
+  subscribeToProgressUpdates,
+  getSyncStatus,
+  performFullSync,
+} from './sync';
+export type {
+  SyncEntityType,
+  SyncOperation,
+  SyncQueueItem,
+  SyncStatus,
+  SyncResult,
+  ProgressData,
+  MealCompletionData,
+  FastingSessionData,
+} from './sync';
+
 // Types
 export * from './types';

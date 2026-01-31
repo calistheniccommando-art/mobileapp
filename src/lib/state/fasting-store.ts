@@ -8,12 +8,14 @@
  * - Automatic daily reset logic
  * - Edge case handling (timezone changes, missed windows, etc.)
  * - Admin-ready extensible structure
+ * - Cloud sync support
  */
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { FastingPlan } from '@/types/fitness';
+import { syncService } from '@/lib/supabase/sync';
 
 // ==================== TYPES ====================
 
@@ -74,6 +76,11 @@ export interface FastingState {
   // Daily reset tracking
   lastResetDate: string; // YYYY-MM-DD
 
+  // Cloud sync
+  userId: string | null;
+  isSyncing: boolean;
+  lastSyncAt: string | null;
+
   // Actions - Configuration
   setFastingPlan: (plan: FastingType['plan']) => void;
   setCustomWindow: (window: FastingWindow) => void;
@@ -98,6 +105,10 @@ export interface FastingState {
   // Actions - Admin & Edge Cases
   forceResetCycle: () => void;
   handleMissedWindow: () => void;
+
+  // Actions - Cloud Sync
+  setUserId: (userId: string | null) => void;
+  syncFastingSession: () => Promise<void>;
 
   // Actions - Cleanup
   resetAllData: () => void;
@@ -300,6 +311,9 @@ const initialState = {
   cycleHistory: {},
   lastStatusUpdate: new Date().toISOString(),
   lastResetDate: getDateString(),
+  userId: null,
+  isSyncing: false,
+  lastSyncAt: null,
 };
 
 export const useFastingStore = create<FastingState>()(
@@ -550,6 +564,46 @@ export const useFastingStore = create<FastingState>()(
         get().initializeTodayCycle();
       },
 
+      // Cloud Sync Actions
+      setUserId: (userId) => {
+        set({ userId });
+      },
+
+      syncFastingSession: async () => {
+        const { userId, currentCycle, isSyncing, selectedPlan } = get();
+        if (!userId || !currentCycle || isSyncing) return;
+
+        set({ isSyncing: true });
+
+        try {
+          const fastingType = FASTING_TYPES[selectedPlan];
+          
+          await syncService.syncFastingSession({
+            user_id: userId,
+            start_time: currentCycle.fastingStartedAt || currentCycle.cycleStartedAt,
+            end_time: currentCycle.fastingEndedAt,
+            target_hours: fastingType.fastingHours,
+            actual_hours: currentCycle.fastingStartedAt && currentCycle.fastingEndedAt
+              ? Math.round(
+                  (new Date(currentCycle.fastingEndedAt).getTime() -
+                    new Date(currentCycle.fastingStartedAt).getTime()) /
+                    (1000 * 60 * 60)
+                )
+              : undefined,
+            completed: currentCycle.completed,
+            broken_early: currentCycle.broken,
+          });
+
+          set({
+            isSyncing: false,
+            lastSyncAt: new Date().toISOString(),
+          });
+        } catch (error) {
+          console.error('[FastingStore] Sync error:', error);
+          set({ isSyncing: false });
+        }
+      },
+
       resetAllData: () => {
         set({
           ...initialState,
@@ -566,6 +620,7 @@ export const useFastingStore = create<FastingState>()(
         currentCycle: state.currentCycle,
         cycleHistory: state.cycleHistory,
         lastResetDate: state.lastResetDate,
+        userId: state.userId,
       }),
     }
   )
@@ -579,3 +634,4 @@ export const useFastingWindow = () => useFastingStore((s) => s.getFastingWindow(
 export const useCanChangeFastingPlan = () => useFastingStore((s) => s.canChangePlan());
 export const useFastingStreak = () => useFastingStore((s) => s.getCurrentStreak());
 export const useFastingCompliance = () => useFastingStore((s) => s.getWeeklyCompliance());
+export const useFastingSyncStatus = () => useFastingStore((s) => ({ isSyncing: s.isSyncing, lastSyncAt: s.lastSyncAt }));

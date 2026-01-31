@@ -7,12 +7,14 @@
  * - Fasting compliance
  * - Daily/weekly/monthly statistics
  * - Milestones and achievements
+ * - Cloud sync with offline support
  */
 
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { Exercise, Meal, FastingPlan } from '@/types/fitness';
+import { syncService } from '@/lib/supabase/sync';
 
 // ==================== TYPES ====================
 
@@ -120,6 +122,12 @@ export interface ProgressState {
   exerciseTimerStarted: number | null;
   restTimerEndTime: number | null;
 
+  // Cloud sync state
+  userId: string | null;
+  isSyncing: boolean;
+  lastSyncAt: string | null;
+  syncError: string | null;
+
   // Actions - Day Management
   initializeDay: (dayNumber: number, exercises: Exercise[], meals: Meal[], fastingPlan: FastingPlan | null) => void;
   getDayProgress: (date: string) => DailyProgress | null;
@@ -151,6 +159,12 @@ export interface ProgressState {
   // Actions - Milestones
   checkAndAwardMilestones: () => void;
   dismissMilestone: () => void;
+
+  // Actions - Cloud Sync
+  setUserId: (userId: string | null) => void;
+  syncToCloud: () => Promise<void>;
+  syncExerciseCompletion: (exerciseId: string, workoutId: string, setsCompleted?: number, repsCompleted?: number) => Promise<void>;
+  syncMealCompletion: (mealId: string, mealType: string) => Promise<void>;
 
   // Reset
   resetProgress: () => void;
@@ -272,6 +286,12 @@ export const useProgressStore = create<ProgressState>()(
       activeExerciseId: null,
       exerciseTimerStarted: null,
       restTimerEndTime: null,
+      
+      // Cloud sync state
+      userId: null,
+      isSyncing: false,
+      lastSyncAt: null,
+      syncError: null,
 
       initializeDay: (dayNumber, exercises, meals, fastingPlan) => {
         const today = getDateString();
@@ -684,6 +704,69 @@ export const useProgressStore = create<ProgressState>()(
         set({ pendingMilestone: null });
       },
 
+      // Cloud Sync Actions
+      setUserId: (userId) => {
+        set({ userId });
+      },
+
+      syncToCloud: async () => {
+        const { userId, isSyncing } = get();
+        if (!userId || isSyncing) return;
+
+        set({ isSyncing: true, syncError: null });
+
+        try {
+          const result = await syncService.performFullSync(userId);
+          
+          set({
+            isSyncing: false,
+            lastSyncAt: new Date().toISOString(),
+            syncError: result.success ? null : result.errors.join(', '),
+          });
+        } catch (error) {
+          set({
+            isSyncing: false,
+            syncError: error instanceof Error ? error.message : 'Sync failed',
+          });
+        }
+      },
+
+      syncExerciseCompletion: async (exerciseId, workoutId, setsCompleted, repsCompleted) => {
+        const { userId, todayProgress } = get();
+        if (!userId || !todayProgress) return;
+
+        const exercise = todayProgress.exercises.find((e) => e.exerciseId === exerciseId);
+        if (!exercise) return;
+
+        await syncService.syncWorkoutProgress({
+          user_id: userId,
+          date: todayProgress.date,
+          workout_id: workoutId,
+          exercise_id: exerciseId,
+          sets_completed: setsCompleted,
+          reps_completed: repsCompleted?.toString(),
+          duration_seconds: exercise.durationSeconds,
+          completed_at: exercise.completedAt,
+        });
+      },
+
+      syncMealCompletion: async (mealId, mealType) => {
+        const { userId, todayProgress } = get();
+        if (!userId || !todayProgress) return;
+
+        const meal = todayProgress.meals.find((m) => m.mealId === mealId);
+        if (!meal) return;
+
+        await syncService.syncMealCompletion({
+          user_id: userId,
+          meal_id: mealId,
+          date: todayProgress.date,
+          meal_type: mealType,
+          completed_at: meal.eatenAt,
+          skipped: meal.status === 'skipped',
+        });
+      },
+
       resetProgress: () => {
         set({
           currentDayNumber: 1,
@@ -697,6 +780,10 @@ export const useProgressStore = create<ProgressState>()(
           activeExerciseId: null,
           exerciseTimerStarted: null,
           restTimerEndTime: null,
+          userId: null,
+          isSyncing: false,
+          lastSyncAt: null,
+          syncError: null,
         });
       },
     }),
